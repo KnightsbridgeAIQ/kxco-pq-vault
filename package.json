@@ -8,7 +8,7 @@
     ".": "./src/index.js"
   },
   "bin": {
-    "kxco-vault": "./bin/kxco-vault.js"
+    "kxco-vault": "bin/kxco-vault.js"
   },
   "files": [
     "bin/",
@@ -37,7 +37,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/JackKXCO/kxco-pq-vault"
+    "url": "git+https://github.com/JackKXCO/kxco-pq-vault.git"
   },
   "author": "KXCO <dev@kxco.ai>"
 }
