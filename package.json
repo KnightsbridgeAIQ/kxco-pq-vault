@@ -1,0 +1,43 @@
+{
+  "name": "kxco-pq-vault",
+  "version": "0.1.0",
+  "description": "Post-quantum file encryption CLI and library — ML-KEM-768 + AES-256-GCM",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "kxco-vault": "./bin/kxco-vault.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "dependencies": {
+    "@scure/base": "^1.2.4",
+    "kxco-post-quantum": "^1.1.2"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --input-type=module --eval \"import('./src/cli.js')\" && echo lint ok"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "keywords": [
+    "post-quantum",
+    "encryption",
+    "ml-kem",
+    "kyber",
+    "cli",
+    "kxco",
+    "pqc",
+    "aes-gcm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JackKXCO/kxco-pq-vault"
+  },
+  "author": "KXCO <dev@kxco.ai>"
+}
