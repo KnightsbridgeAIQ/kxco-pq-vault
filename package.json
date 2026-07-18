@@ -61,7 +61,7 @@
     "node": ">=20.19"
   },
   "dependencies": {
-    "@scure/base": "^1.2.4",
+    "@scure/base": "^2.2.0",
     "kxco-post-quantum": "^1.1.2"
   },
   "scripts": {
