@@ -289,7 +289,7 @@ The entire header is used as GCM additional authenticated data. Modifying any fi
 
 Key encapsulation uses [Noble post-quantum](https://github.com/paulmillr/noble-post-quantum) (ML-KEM-768, FIPS 203 final).
 
-To report a vulnerability, open a [private security advisory](https://github.com/JackKXCO/kxco-pq-vault/security/advisories/new) or email **security@kxco.ai**.
+To report a vulnerability, open a [private security advisory](https://github.com/KnightsbridgeAIQ/kxco-pq-vault/security/advisories/new) or email **security@kxco.ai**.
 
 ---
 
