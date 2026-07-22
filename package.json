@@ -1,6 +1,6 @@
 {
   "name": "kxco-pq-vault",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Post-quantum file and envelope encryption using ML-KEM-768 — encrypt to one or more recipients, decrypt only with the matching private key.",
   "keywords": [
     "post-quantum",
@@ -21,7 +21,7 @@
     "quantum-resistant"
   ],
   "license": "Apache-2.0",
-  "author": "KXCO by Knightsbridge <hello@kxco.ai>",
+  "author": "Shayne Heffernan and John Heffernan",
   "contributors": [
     {
       "name": "Shayne Heffernan"
@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@scure/base": "^1.2.4",
-    "kxco-post-quantum": "^1.1.2"
+    "kxco-post-quantum": "^1.2.0"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
