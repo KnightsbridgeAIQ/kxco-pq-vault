@@ -1,6 +1,6 @@
 {
   "name": "kxco-pq-vault",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Post-quantum file and envelope encryption using ML-KEM-768, encrypt to one or more recipients, decrypt only with the matching private key.",
   "keywords": [
     "post-quantum",
