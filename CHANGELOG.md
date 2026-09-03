@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.3
+
+Documentation only. No code changed and no behaviour changed.
+
+`.socket.yml` described `@scure/base` as "audited" with no auditor and no date.
+An unattributed audit claim is not one a reader can check, so it is removed.
+The file now records the upstream audit history instead: `@noble/hashes`
+Cure53 Jan 2022, `@noble/curves` Trail of Bits / Kudelski / Cure53 2023-2024,
+`@noble/ciphers` Cure53 Sep 2024, `@noble/post-quantum` maintainer-audited.
+
+
 ## 1.0.0 — 2026-05-24
 
 Stable release.
