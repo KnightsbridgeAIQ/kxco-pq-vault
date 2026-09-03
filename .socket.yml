@@ -17,7 +17,11 @@ issues:
     action: warn
 
 # kxco-post-quantum — maintained by this organisation.
-# @scure/base — Paul Miller's encoding library, audited, no transitive deps.
+# @scure/base — Paul Miller's encoding library, no transitive deps.
+# "audited" was asserted here with no auditor and no date, so it is removed:
+# an unattributed audit claim is not one a reader can check.
+# Note: @noble/post-quantum, reached via kxco-post-quantum, has been audited
+# by NOBODY. It is self-audited by its maintainer only.
 ignore:
   - "kxco-post-quantum"
   - "@scure/base"

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.3
+
+Documentation only. No code changed and no behaviour changed.
+
+`.socket.yml` described `@scure/base` as "audited" with no auditor and no date.
+An unattributed audit claim is not one a reader can check, so it is removed.
+The file now also records that `@noble/post-quantum`, reached through
+`kxco-post-quantum`, has been audited by nobody and is self-audited by its
+maintainer only.
+
+
 ## 1.0.0 — 2026-05-24
 
 Stable release.
