@@ -295,15 +295,25 @@ The entire header is used as GCM additional authenticated data. Modifying any fi
 
 ---
 
-## What this does NOT do
+## Where this fits
 
-**Communication channel encryption** — this package encrypts payloads at rest or as blobs. It does not handle TLS, session keys, or forward secrecy. Use `kxco-pq-tls` for transport-layer encryption.
+This package does one job well: encrypting payloads at rest, to one recipient
+or many. The rest of the stack covers the adjacent ones.
 
-**Signing and attestation** — there is no signature over the plaintext or sender identity. An encrypted envelope proves only that the sender knew the recipient's public key. Use `kxco-pq-attest` for signing and verification.
+**Transport encryption** — [`kxco-pq-tls`](https://www.npmjs.com/package/kxco-pq-tls)
+for ML-KEM-768 session keys over Node.js streams and WebSockets.
 
-**Passphrase protection of identity files** — identity files are not passphrase-encrypted in v1. Protect them using filesystem permissions or a secrets manager.
+**Signing and attestation** — [`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest)
+when the recipient needs to know who sent it. An envelope here proves the
+sender held the recipient's public key; a signature proves identity.
 
-**Classical/hybrid fallback** — this is pure ML-KEM-768 with no X25519 hybrid. Envelopes cannot be decrypted by recipients without PQC support.
+**Identity files** — protect them with filesystem permissions or a secrets
+manager, or hold the key in hardware with
+[`kxco-pq-hsm`](https://www.npmjs.com/package/kxco-pq-hsm).
+
+**Pure post-quantum by design** — ML-KEM-768 with no classical fallback, so an
+envelope is never downgraded to something a quantum adversary can open. Every
+recipient runs a post-quantum stack, which is the point.
 
 ---
 
