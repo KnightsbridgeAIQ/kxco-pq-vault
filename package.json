@@ -57,7 +57,8 @@
     "README.md",
     "SECURITY.md",
     "bin/",
-    "src/"
+    "src/",
+    "ASSESSMENT.md"
   ],
   "engines": {
     "node": ">=20.19"
@@ -68,7 +69,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --input-type=module --eval \"import('./src/cli.js')\" && echo lint ok"
+    "lint": "node --input-type=module --eval \"import('./src/cli.js')\" && echo lint ok",
+    "evidence": "node scripts/build-evidence.mjs"
   },
   "funding": "https://kxco.ai",
   "publishConfig": {
