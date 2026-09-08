@@ -2,3 +2,6 @@ node_modules/
 *.kxco
 *.dec
 .env
+
+# Generated evidence bundle. Reproduce with `npm run evidence`.
+dist/
