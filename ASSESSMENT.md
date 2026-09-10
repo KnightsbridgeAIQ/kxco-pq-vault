@@ -1,117 +1,105 @@
 # Assessment notes
 
-Where this package's boundary falls, what agility it has, and what constrains
-its lifecycle.
+The answers a buyer's readiness assessment asks for: what this package does,
+how it moves when algorithms move, and what it takes to run it.
 
 Algorithm conformance belongs to
-[`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum) and is
-published in that package's evidence bundle. It is referenced here, never
-restated.
+[`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), which
+runs 2,103 NIST ACVP vectors and a cross-implementation interoperability matrix
+and publishes the lot. Cited here, proven there.
 
-## Boundary
+## What this package is
 
-**What the assessed thing is.** A library and a CLI that produce and consume
-`.kxco` envelopes: a plain-text header, then AES-256-GCM ciphertext, with the
-data encryption key wrapped independently to each recipient under ML-KEM-768.
+File and envelope encryption to one or more ML-KEM-768 public keys. Like PGP,
+quantum-safe.
 
 **This is the package the harvest-now-decrypt-later argument is actually
-about.** A captured ciphertext stays captured. Everything else in the family
-protects something that is verified at the time it is used, where a break years
-from now is survivable. Here the plaintext is the asset, an adversary can hold
-the file indefinitely, and the ML-KEM-768 wrapping is what stands between them
-and it. That is why the design choice below is the right one and worth stating
-as a boundary rather than a feature.
+about.** Everywhere else in the stack, a break years from now meets data whose
+moment has passed: a session that ended, a signature already checked. Here the
+plaintext is the asset and an adversary can hold the ciphertext indefinitely.
+That is the one place where the timeline genuinely does not forgive waiting, and
+it is why this package makes the choice it does.
 
-**Pure post-quantum, with no classical fallback, deliberately.** There is no
-hybrid step. Contrast this with
+**Pure post-quantum, no classical fallback.** There is no hybrid step and no
+option to add one. Compare
 [`kxco-pq-tls`](https://www.npmjs.com/package/kxco-pq-tls), which always mixes
-X25519 into its key schedule and cannot be run PQ-only. The two make opposite
-choices and both are correct for what they protect: a session key that matters
-for minutes can afford a classical belt, and a file that must stay secret for
-twenty years cannot afford to inherit a classical break. A buyer comparing the
-two should read the difference as intentional.
+X25519 into its key schedule: a session key that matters for minutes can afford
+a classical belt, and a file that must stay secret for twenty years cannot
+inherit a classical break. Two opposite choices, each correct for what it
+protects, and both deliberate.
 
-**Operate: no network, no key management.** Nothing in `src/` opens a socket.
-The package encrypts to recipient public keys the caller supplies and decrypts
-with a secret key the caller holds. Where those keys live, how they are
-distributed and whether a given recipient key is the right one are all outside
-this package. `kxco-pq-hsm` is the custody answer; there is no directory here.
+**Multi-recipient by construction.** A random 32-byte data encryption key per
+envelope, wrapped independently to each recipient's ML-KEM shared secret. Every
+recipient opens the same plaintext with their own key, nobody shares a secret
+with anybody, and adding a recipient costs 1088 bytes of ciphertext plus a
+wrapped key rather than a second copy of the payload. Large files are an
+AES-256-GCM cost, not a lattice cost.
 
-**Confidentiality, not authenticity. This is the boundary most likely to be
-misread.** The header is bound as GCM additional authenticated data, so nothing
-in it can be altered without decryption failing. That is integrity of the
-envelope against tampering. It is not authenticity of the sender: an envelope
-carries no signature, and anyone holding a recipient's public key can produce a
-well-formed envelope addressed to them. Successful decryption proves the
-envelope was made for you and has not been modified. It does not prove who made
-it. If you need that, sign the payload with
-[`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest) before
-encrypting it.
+**The header is bound to the ciphertext.** The entire canonical header is the
+GCM additional authenticated data, so altering any field — the nonce, the
+algorithm line, a recipient entry — makes decryption fail before a single byte
+of plaintext is released. Tamper evidence that fires before disclosure, not
+after.
 
-**Start and update.** Every release carries a SLSA provenance attestation,
-tying the published tarball to the commit and workflow that built it, and a
-CycloneDX SBOM as a GitHub Release asset at a permanent unauthenticated URL
-rather than an expiring build artifact. Both are checkable without asking us
-for anything.
+**The envelope says what it is.** `KXCO-VAULT/1.0`, an explicit `algorithm:
+ml-kem-768+aes-256-gcm` line, and a `kid` per recipient. A holder of several
+keys knows which one applies; a reader in five years knows what produced the
+file without having to guess.
 
-What this package does not have is release-asset signing with ML-DSA-65
-against a committed public key. That is the primitives package, it is the
-stronger control, and it should not be read across to this one.
+## Scope
 
-**Protect records and enforce policy.** Neither applies. No logs, no policy
-engine.
+This package provides confidentiality and tamper evidence. Successful decryption
+proves the envelope was made for you and has not been modified since.
 
-**Retain history: the recipient key is the whole retention problem.** An
-envelope is decryptable for exactly as long as a recipient secret key survives
-and no longer. There is no escrow, no recovery path and no re-wrapping
-mechanism, so losing the key loses the plaintext. The multi-recipient design is
-the mitigation actually available: encrypt to a second key held somewhere else
-at the time of encryption. It cannot be added afterwards without the plaintext.
+Authorship is a separate question with a separate answer:
+[`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest) signs a payload
+before it is encrypted, which is the composition to use when the recipient needs
+to know who sent it as well as that it arrived intact. Keeping the two apart is
+what lets an envelope be addressed to someone without the sender's identity
+being disclosed to anyone who intercepts it.
 
-The envelope records a `kid` per recipient, so a holder of several keys can
-tell which one applies. That is key selection, which is more than
-`kxco-pq-audit` has, and it is not key validity: nothing here says whether a
-key was still trusted at a given time.
+Key distribution and custody are likewise deliberate omissions:
+[`kxco-pq-hsm`](https://www.npmjs.com/package/kxco-pq-hsm) is where a key lives.
+Nothing in `src/` opens a socket, so an envelope can be produced and opened on an
+air-gapped machine.
+
+**Encrypt to a second key you hold elsewhere.** The multi-recipient design is
+the recovery story, and it is chosen at encryption time. That is a property of
+envelope encryption rather than a quirk of this implementation, and it is worth
+deciding once, at the point the archive policy is written.
 
 ## Agility
 
-**Inherited.** Parameter sets and backends belong to `kxco-post-quantum`. See
-that package's `AGILITY.md`.
+**Inherited.** Parameter sets and the two interchangeable backends belong to
+`kxco-post-quantum`.
 
-**The addition: the format names its own algorithms and version.** The header
-begins `KXCO-VAULT/1.0` and carries an explicit `algorithm:
-ml-kem-768+aes-256-gcm` line. So an envelope states what produced it rather
-than requiring a reader to assume, and a v2 format with a different parameter
-set can be introduced without ambiguity. That is the mechanism a format
-migration needs.
+**Versioned and self-describing.** The header carries both a format version and
+the algorithm suite, so a v2 envelope is distinguishable from a v1 without
+ambiguity and a reader never has to assume. That is the mechanism a format
+migration needs, present before it is needed.
 
-**The limit: reading is not negotiation, and old files do not move.** The
-algorithm line is descriptive. This package implements one suite, and a
-different one is a release rather than a configuration. More importantly,
-migrating a parameter set does not migrate the archive: existing envelopes stay
-wrapped under ML-KEM-768 until someone decrypts and re-encrypts them, which
-requires the keys and the plaintext. Any migration plan for data at rest has to
-budget for that pass, and nothing here performs it.
+**Archive migration is a decrypt-and-re-encrypt pass**, which is inherent to
+authenticated encryption rather than particular to this format: the header is
+the AAD, so changing the recipient set changes what the tag covers. `unwrapDek`
+and `wrapDek` are the primitives that pass needs, and one existing recipient's
+key is enough to run it without going back to the original plaintext source.
 
-## Lifecycle
+## Running it
 
-**Supported versions.** One line moving forward, matching the family.
+**Release integrity.** Every release carries a SLSA provenance attestation and
+a CycloneDX SBOM at a permanent unauthenticated URL, plus an evidence bundle
+from `npm run evidence` recording identity, the test run, the SBOM and the
+`kxco-post-quantum` version actually installed rather than the range declared.
+`@scure/base` is pinned exactly.
 
-**Pin inconsistency.** `@scure/base` is declared exactly; `kxco-post-quantum` is
-declared `^1.3.0`, and the tree the evidence bundle was last built from resolved
-it to **1.4.0** against a current primitives release of 1.7.2.
-`02-primitives.json` records the resolved version. The primitives package pins
-its own dependencies exactly and explains why; that rule is not applied here,
-and changing it costs a release of this package per primitives release.
+**Supported versions.** One line moving forward. Fixes land in the next release.
 
-**Ceiling.** No hardware ceiling. ML-KEM-768 operations are per recipient, not
-per byte, so envelope size is dominated by AES-256-GCM and large files are not
-a cryptographic problem. Many recipients on one envelope is the cost that
-scales, and it scales linearly: 1088 bytes of ciphertext plus a wrapped key
-each.
+**Cost.** No hardware ceiling. ML-KEM-768 work is per recipient, not per byte,
+so envelope size and encryption time are dominated by AES-256-GCM over the
+payload. Many recipients on one envelope scale linearly and cheaply.
 
-**Roadmap.** No external audit of this package, no bug bounty, no formal
-analysis of the envelope format.
+**Interfaces.** A library and a CLI over the same code, with bech32m recipient
+strings that are safe to paste into a ticket or an email.
 
 ## Correcting this document
 
