@@ -1,7 +1,7 @@
 {
   "name": "kxco-pq-vault",
-  "version": "1.1.5",
-  "description": "Post-quantum file and envelope encryption with ML-KEM-768 (FIPS 203). Encrypt to one recipient or many; each opens it with their own key. bech32m recipient strings, AES-256-GCM payloads.",
+  "version": "1.1.6",
+  "description": "Post-quantum file and envelope encryption, like PGP: ML-KEM-768 (NIST FIPS 203) to one recipient or many, each opening it with their own key, with no classical step for a harvest-now-decrypt-later adversary to break. AES-256-GCM payloads, bech32m recipient strings, a CLI and a library.",
   "keywords": [
     "post-quantum",
     "encryption",
@@ -18,7 +18,14 @@
     "harvest-now-decrypt-later",
     "fips-203",
     "nist",
-    "quantum-resistant"
+    "quantum-resistant",
+    "pqc-migration",
+    "crypto-agility",
+    "pgp-alternative",
+    "data-at-rest",
+    "tamper-evident",
+    "ml-kem-768",
+    "secure-file-sharing"
   ],
   "license": "Apache-2.0",
   "author": "Shayne Heffernan and John Heffernan",

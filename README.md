@@ -1,40 +1,32 @@
 # kxco-pq-vault
 
+**Post-quantum file encryption, like PGP: ML-KEM-768 envelopes that one recipient or many can open, each with their own key.**
+
 [![npm](https://img.shields.io/npm/v/kxco-pq-vault?label=npm&color=b0964f)](https://www.npmjs.com/package/kxco-pq-vault)
+[![downloads](https://img.shields.io/npm/dm/kxco-pq-vault?label=downloads&color=b0964f)](https://www.npmjs.com/package/kxco-pq-vault)
+[![NIST ACVP](https://img.shields.io/badge/NIST_ACVP-1,793_passed,_0_failed-2ea44f)](https://github.com/KnightsbridgeAIQ/kxco-post-quantum/blob/main/CONFORMANCE.md)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f)](https://www.npmjs.com/package/kxco-pq-vault)
 [![Socket](https://socket.dev/api/badge/npm/package/kxco-pq-vault)](https://socket.dev/npm/package/kxco-pq-vault)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 [![node](https://img.shields.io/node/v/kxco-pq-vault.svg)](https://nodejs.org)
 
-Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-768 public keys — like PGP, but quantum-safe. The encrypted envelope can only be decrypted by the holder of the matching private key.
+Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-768 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key.
 
----
+- **Built for harvest-now, decrypt-later.** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) names adversaries "collecting United States information now, and decrypting it later once large-scale quantum computers are operational". A vault envelope is pure ML-KEM-768 with no classical step, so a copy taken today holds no classical key exchange to break later.
+- **One envelope, many recipients.** A random 32-byte data key per envelope is wrapped to each recipient's ML-KEM shared secret, so each recipient opens the same plaintext with their own key and nobody shares a secret.
+- **Tampering fails before disclosure.** The whole header is the AES-256-GCM additional authenticated data, so a changed nonce, algorithm line or recipient entry fails decryption before any plaintext is released.
+- **The envelope says what it is.** `KXCO-VAULT/1.0`, an explicit algorithm line and a key id per recipient, so a holder of several keys knows which one applies and a reader years from now knows what produced the file.
+- **A CLI and a library over the same code.** Recipient strings are bech32m, safe to paste into a ticket or an email, and nothing in `src/` opens a socket, so an envelope can be made and opened on an air-gapped machine.
+- **Proven underneath.** 1,793 NIST ACVP vectors passed, 0 failed, and 225 interoperability checks against liboqs, Bouncy Castle and the Python reference implementations, 0 failed, in [`kxco-post-quantum`](https://github.com/KnightsbridgeAIQ/kxco-post-quantum/blob/main/CONFORMANCE.md).
+- **A supply chain you can check.** SLSA provenance and a CycloneDX SBOM on every release since 1.1.1, third-party dependencies pinned to exact versions, and every GitHub Action pinned by commit SHA.
 
-## Release integrity
+**The migration has dates.**
 
-Every release of this package is checkable without asking us for anything.
+- **NIST** published [FIPS 203](https://csrc.nist.gov/pubs/fips/203/final), [FIPS 204](https://csrc.nist.gov/pubs/fips/204/final) and [FIPS 205](https://csrc.nist.gov/pubs/fips/205/final) in August 2024.
+- **United States:** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks), signed on 22 June 2026, moves federal high-value and high-impact systems to post-quantum key establishment by 31 December 2030 and to post-quantum signatures by 31 December 2031. [OMB M-26-15](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf) requires PQC-agile libraries for all new applications.
+- **United Kingdom:** the [NCSC](https://www.ncsc.gov.uk/guidance/pqc-migration-timelines) sets 2028, 2031 and 2035 as its migration milestones.
 
-- **Provenance.** Each release carries a SLSA provenance attestation tying the
-  published tarball to the commit and workflow that built it. Verify with
-  `npm audit signatures`, or read it directly from
-  `registry.npmjs.org/-/npm/v1/attestations/kxco-pq-vault@<version>`.
-- **Bill of materials.** A CycloneDX SBOM is published as a GitHub Release asset
-  at `releases/download/v<version>/sbom.cyclonedx.json`, a permanent
-  unauthenticated URL. Not an expiring build artifact.
-- **Pinned where it matters.** Third-party dependencies are pinned to exact
-  versions, never ranges, so the code that performs the cryptography cannot
-  change without a release. Sibling `kxco-*` packages sit on caret ranges
-  deliberately: it means a correctness fix in the base package reaches you
-  without a release of every package above it. That is not theoretical. When
-  `@noble/post-quantum` 0.7.1 was found to fail NIST SLH-DSA verification
-  vectors, the revert in the base package propagated here on the next install.
-  Every GitHub Action is pinned by 40-character commit SHA.
-- **Conformance underneath.** The cryptography comes from
-  [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), which
-  is run against **2,103 NIST ACVP vectors: 1,793 passed, 0 failed, 310 skipped** and a **225-check
-  cross-implementation interoperability matrix** against liboqs, Bouncy Castle
-  and two pure-Python implementations, in both directions and with negative
-  controls. Its published tarball also rebuilds bit-for-bit from its own tag,
-  verified in CI on every run.
+[Quick start](#quick-start) · [CLI reference](#cli-reference) · [Envelope format](#envelope-format) · [For institutions](#for-institutions) · [Assessment notes](./ASSESSMENT.md) · [Changelog](./CHANGELOG.md) · [kxco.ai](https://kxco.ai)
 
 ## When to use this
 
@@ -43,9 +35,9 @@ Every release of this package is checkable without asking us for anything.
 - Anywhere you would use PGP but need quantum resistance
 - Multi-recipient envelopes where each party holds their own key
 
-This package is **not** a communication channel. It encrypts payloads at rest or as opaque blobs. For session-layer encryption see `kxco-pq-tls`. For signing and attestation see `kxco-pq-attest`.
+It encrypts payloads at rest or as opaque blobs. For session-layer encryption, use [`kxco-pq-tls`](https://www.npmjs.com/package/kxco-pq-tls). To prove who sent a payload as well as that it arrived intact, sign it with [`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest) before it is encrypted.
 
----
+Protect identity files with filesystem permissions or a secrets manager, or hold the key in hardware with [`kxco-pq-hsm`](https://www.npmjs.com/package/kxco-pq-hsm).
 
 ## Install
 
@@ -58,8 +50,6 @@ Or as a CLI tool:
 ```sh
 npm install -g kxco-pq-vault
 ```
-
----
 
 ## Quick start
 
@@ -91,14 +81,15 @@ import {
   wrapDek, unwrapDek,
   serializeHeader, parseEnvelope,
   encryptPayload, decryptPayload,
-  readIdentity,
+  readIdentity, resolveRecipient,
   KxcoVaultError,
 } from 'kxco-pq-vault'
 
 // --- ENCRYPT ---
 
-// Recipient's public key (1184 bytes, ML-KEM-768)
-const recipientPubkey = decodePublicKey('kxco1qvp93xj...')
+// Recipient's public key (1184 bytes, ML-KEM-768): from their identity file,
+// or decodePublicKey('kxco1...') for a recipient string they shared
+const recipientPubkey = resolveRecipient('@alice.kxco')
 
 const dek     = generateDek()    // 32-byte random data encryption key
 const nonce   = generateNonce()  // 12-byte random GCM nonce
@@ -141,7 +132,25 @@ const decrypted = decryptPayload(dek2, Buffer.from(header.nonce, 'hex'), aad, ci
 writeFileSync('report.pdf', decrypted)
 ```
 
----
+## For institutions
+
+The cryptography is free under Apache-2.0, works offline and needs nothing from
+KXCO, now or in ten years. What KXCO sells is the part that has to be operated:
+an answer about the present.
+
+| Service | What you get |
+|---|---|
+| Hosted key registry | Whether a key is active, revoked or rotated, answered at verification time |
+| Meta-transaction relay | KXCO validates your signed intent, pays the gas and submits it, so you never hold a token or run a node |
+| On-chain anchoring | A timestamp on Armature L1 that the chain itself has verified |
+| Live revocation | `anchored+live` verification, which confirms the signing key is still trusted now |
+| Support and SLA | Availability commitments, an escalation path and a named contact |
+
+Priced in USD, per seat, per year. No tokens, no nodes and no wallets. The line
+between free and paid is set out in
+[LICENCE-PRODUCT.md](https://github.com/KnightsbridgeAIQ/kxco-post-quantum/blob/main/LICENCE-PRODUCT.md).
+
+**Talk to us: [admin@kxco.ai](mailto:admin@kxco.ai)** · [kxco.ai](https://kxco.ai)
 
 ## API
 
@@ -156,8 +165,6 @@ Encodes a 1184-byte ML-KEM-768 public key as a `kxco1...` bech32m string suitabl
 #### `decodePublicKey(str: string): Buffer`
 
 Decodes a `kxco1...` bech32m string back to raw public key bytes. Throws `KxcoVaultError` if the string is malformed or the wrong length.
-
----
 
 ### Crypto primitives
 
@@ -189,9 +196,7 @@ Encrypts `plaintext` with AES-256-GCM. `ad` is the canonical envelope header bou
 
 Decrypts a payload produced by `encryptPayload`. Throws `KxcoVaultError` if authentication fails.
 
----
-
-### Envelope format
+### Envelope helpers
 
 #### `serializeHeader({ recipients, nonce, created }): string`
 
@@ -199,35 +204,29 @@ Produces the canonical plain-text header for an envelope. `recipients` is an arr
 
 #### `parseEnvelope(buf: Buffer): { header, canonicalHeader, ciphertext }`
 
-Splits a `.kxco` envelope buffer into its parsed header object, the raw canonical header bytes (for use as GCM AAD), and the raw ciphertext. Throws `KxcoVaultError` if the separator is missing or the header is malformed.
+Splits an envelope buffer, the bytes of a `.kxco` file, into its parsed header object, the raw canonical header bytes (for use as GCM AAD), and the raw ciphertext. Throws `KxcoVaultError` if the separator is missing or the header is malformed.
 
 #### `parseHeaderText(text: string): object`
 
 Parses just the text portion of a header (without the binary ciphertext). Useful for inspection without decryption.
 
----
-
 ### Identity and recipient helpers
 
 #### `readIdentity(path: string): { publicKey: Buffer, secretKey: Buffer }`
 
-Reads a `keypair.kxco` identity file and returns the parsed public and secret key buffers. Throws `KxcoVaultError` if the file is missing, malformed, or contains a key of the wrong length.
+Reads an identity file such as `keypair.kxco` and returns the parsed public and secret key buffers. Throws `KxcoVaultError` if the file is missing, malformed, or contains a key of the wrong length.
 
 #### `resolveRecipient(str: string): Buffer`
 
 Resolves a recipient string to raw public key bytes. Accepts:
 - A `kxco1...` bech32m string
-- `@/path/to/keypair.kxco` — reads the public key from an identity file
-
----
+- `@/path/to/keypair.kxco`, which reads the public key from an identity file
 
 ### Error class
 
 #### `KxcoVaultError`
 
 All errors thrown by this library use `KxcoVaultError` (extends `Error`, `name === 'KxcoVaultError'`). Authentication failures, malformed envelopes, bad key lengths, and missing recipients all throw this class.
-
----
 
 ## CLI reference
 
@@ -238,7 +237,7 @@ kxco-vault keygen --out <keypair.kxco>
 kxco-vault keygen --out <keypair.kxco> --master <hex> --label <string>
 ```
 
-Generates an ML-KEM-768 keypair and writes it to an identity file. With `--master` and `--label`, derivation is deterministic — the same inputs always produce the same keypair.
+Generates an ML-KEM-768 keypair and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs always produce the same keypair.
 
 ### `recipient`
 
@@ -272,8 +271,6 @@ kxco-vault inspect <file.kxco>
 
 Prints the envelope header without decrypting: algorithm, recipient count, key IDs, nonce, timestamp, and ciphertext size.
 
----
-
 ## Envelope format
 
 `.kxco` files have a plain-text header followed by raw binary ciphertext:
@@ -283,70 +280,82 @@ KXCO-VAULT/1.0
 algorithm: ml-kem-768+aes-256-gcm
 recipients: 1
 recipient[0].kid: <16 hex chars>
-recipient[0].encapsulated_key: <hex — 1088-byte ML-KEM-768 ciphertext>
-recipient[0].wrapped_dek: <hex — 48 bytes>
-nonce: <hex — 12 bytes>
+recipient[0].encapsulated_key: <hex: 1088-byte ML-KEM-768 ciphertext>
+recipient[0].wrapped_dek: <hex: 48 bytes>
+nonce: <hex: 12 bytes>
 created: 2026-05-28T00:00:00Z
 --- BEGIN CIPHERTEXT ---
-<binary — AES-256-GCM ciphertext + 16-byte auth tag>
+<binary: AES-256-GCM ciphertext + 16-byte auth tag>
 ```
 
-The entire header is used as GCM additional authenticated data. Modifying any field — including the nonce, algorithm line, or recipient entries — causes decryption to fail before any plaintext is released.
-
----
-
-## Where this fits
-
-This package does one job well: encrypting payloads at rest, to one recipient
-or many. The rest of the stack covers the adjacent ones.
-
-**Transport encryption** — [`kxco-pq-tls`](https://www.npmjs.com/package/kxco-pq-tls)
-for ML-KEM-768 session keys over Node.js streams and WebSockets.
-
-**Signing and attestation** — [`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest)
-when the recipient needs to know who sent it. An envelope here proves the
-sender held the recipient's public key; a signature proves identity.
-
-**Identity files** — protect them with filesystem permissions or a secrets
-manager, or hold the key in hardware with
-[`kxco-pq-hsm`](https://www.npmjs.com/package/kxco-pq-hsm).
-
-**Pure post-quantum by design** — ML-KEM-768 with no classical fallback, so an
-envelope is never downgraded to something a quantum adversary can open. Every
-recipient runs a post-quantum stack, which is the point.
-
----
+The entire header is used as GCM additional authenticated data. Modifying any field, including the nonce, the algorithm line or a recipient entry, causes decryption to fail before any plaintext is released.
 
 ## Crypto design
 
-- **ML-KEM-768** (NIST FIPS 203) — Security Category 3, equivalent to AES-192. Pure post-quantum; no classical fallback by design.
-- **AES-256-GCM** — AEAD symmetric encryption of the payload.
-- **DEK wrapping** — A random 32-byte data encryption key is generated per envelope. Each recipient's ML-KEM shared secret wraps the DEK independently. All recipients decrypt the same plaintext.
-- **Header integrity** — The full canonical header is bound as GCM additional authenticated data, linking header and ciphertext together.
+- **ML-KEM-768** (NIST FIPS 203): Security Category 3, equivalent to AES-192. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
+- **AES-256-GCM**: AEAD symmetric encryption of the payload.
+- **DEK wrapping**: a random 32-byte data encryption key is generated per envelope. Each recipient's ML-KEM shared secret wraps the DEK independently. All recipients decrypt the same plaintext.
+- **Header integrity**: the full canonical header is bound as GCM additional authenticated data, linking header and ciphertext together.
 
-Key encapsulation uses [Noble post-quantum](https://github.com/paulmillr/noble-post-quantum) (ML-KEM-768, FIPS 203 final).
+Key encapsulation runs through [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), on the OpenSSL 3.5 primitives where the runtime provides them and on [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum) elsewhere.
+
+## The KXCO post-quantum family
+
+This package encrypts, so only the recipients you name can open a payload. The
+rest of the family covers the jobs around it:
+
+| You need to | Install |
+|---|---|
+| Put the whole stack in one install | [`kxco-pq`](https://www.npmjs.com/package/kxco-pq) |
+| Use ML-DSA, ML-KEM and SLH-DSA directly | [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum) |
+| Keep signing keys on the HSM you already run | [`kxco-pq-hsm`](https://www.npmjs.com/package/kxco-pq-hsm) |
+| Sign a document or record anyone can verify offline | [`kxco-pq-attest`](https://www.npmjs.com/package/kxco-pq-attest) |
+| Keep a tamper-evident audit trail | [`kxco-pq-audit`](https://www.npmjs.com/package/kxco-pq-audit) |
+| Verify a signature in a browser, with no server | [`kxco-verify`](https://www.npmjs.com/package/kxco-verify) |
+| Issue institution identity credentials | [`kxco-pq-sdk`](https://www.npmjs.com/package/kxco-pq-sdk) |
+| Encrypt files and payloads to one or many recipients | [`kxco-pq-vault`](https://www.npmjs.com/package/kxco-pq-vault) |
+| Encrypt Node streams and WebSockets | [`kxco-pq-tls`](https://www.npmjs.com/package/kxco-pq-tls) |
+| Sign and verify webhooks | [`kxco-post-quantum-webhook`](https://www.npmjs.com/package/kxco-post-quantum-webhook) |
+| Give an AI agent an identity a verified institution sponsors | [`kxco-pq-agent`](https://www.npmjs.com/package/kxco-pq-agent) |
+| Have Armature L1 verify a signature in consensus | [`kxco-pq-chain`](https://www.npmjs.com/package/kxco-pq-chain) |
+| Prove an envelope at three levels, offline to on-chain | [`kxco-pq-network`](https://www.npmjs.com/package/kxco-pq-network) |
+| Generate and rotate keys from a terminal | [`kxco-pq-cli`](https://www.npmjs.com/package/kxco-pq-cli) |
+| Find quantum-vulnerable cryptography in a dependency tree | [`kxco-pq-scan`](https://www.npmjs.com/package/kxco-pq-scan) |
+| Fail the build when code reaches past the wrapper | [`eslint-plugin-kxco-pq`](https://www.npmjs.com/package/eslint-plugin-kxco-pq) |
+
+[kxco.ai](https://kxco.ai) · [Knightsbridge Law](https://knightsbridgelaw.com) · [target150.com](https://target150.com)
+
+## Release integrity
+
+Every release since 1.1.1 carries a SLSA provenance attestation tying the published tarball to
+the commit and workflow that built it: verify with `npm audit signatures`, or read
+it from `registry.npmjs.org/-/npm/v1/attestations/kxco-pq-vault@<version>`. A CycloneDX
+SBOM is published, from v1.1.1, as a GitHub Release asset at
+`releases/download/v<version>/sbom.cyclonedx.json`, a permanent unauthenticated
+URL. Sibling `kxco-*` packages sit on caret ranges so a correctness fix in the
+base package reaches you on the next install, with no release of every package
+above it.
+
+## Security
+
+**ML-KEM-768** (NIST FIPS 203) via [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), running on the OpenSSL 3.5 primitives where the runtime provides them, with AES-256-GCM from Node's own `crypto`. No custom primitives.
+
+Evidenced, and reproducible on your own machine:
+
+- **1,793 NIST ACVP vectors passed, 0 failed** across FIPS 203, 204 and 205, pinned by digest, per [CONFORMANCE.md](https://github.com/KnightsbridgeAIQ/kxco-post-quantum/blob/main/CONFORMANCE.md). The other 310 are pairings the library refuses as weaker than the parameter set
+- **225 interoperability checks passed, 0 failed**, against OpenSSL 3.5, liboqs, Bouncy Castle and dilithium-py/kyber-py, in both directions
+- **SLSA provenance** on every release since 1.1.1: verify with `npm audit signatures`
+- **CycloneDX SBOM** published with every release since 1.1.1
+- `npm run evidence` regenerates the whole bundle from source
+
+Dependency audit history is recorded in [AUDIT.md](https://github.com/KnightsbridgeAIQ/kxco-post-quantum/blob/main/AUDIT.md).
 
 To report a vulnerability, open a [private security advisory](https://github.com/KnightsbridgeAIQ/kxco-pq-vault/security/advisories/new) or email **security@kxco.ai**.
 
----
-
-## Part of the KXCO stack
-
-| Package | Purpose |
-|---|---|
-| `kxco-post-quantum` | ML-KEM-768 and ML-DSA primitives |
-| `kxco-pq-vault` | File and envelope encryption (this package) |
-| `kxco-pq-tls` | Post-quantum transport-layer encryption |
-| `kxco-pq-attest` | Signing and attestation |
-
-[kxco.ai](https://kxco.ai) · [Knightsbridge Law](https://knightsbridge.law) · [target150.com](https://target150.com)
-
----
-
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0 © 2026 KXCO by Knightsbridge. See [LICENSE](LICENSE).
 
-## Authors
+## Maintainers
 
-Shayne Heffernan and John Heffernan — [KXCO by Knightsbridge](https://kxco.ai)
+Shayne Heffernan and John Heffernan, [KXCO by Knightsbridge](https://kxco.ai)

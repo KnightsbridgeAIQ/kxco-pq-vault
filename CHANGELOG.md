@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.6
+
+Documentation. No source change.
+
+**The npm page leads with what the package proves.** The first screen now says why
+encrypted data is the asset a harvest-now-decrypt-later adversary keeps, in
+the words of Executive Order 14412, how one envelope serves many recipients, the
+evidence underneath it and the migration dates set by NIST, Executive Order
+14412, OMB M-26-15 and the UK NCSC.
+
+A family table maps every KXCO package to the job it does, and a new For
+institutions section sets out the operated services and how to reach us. The
+evidence documents are unchanged and linked from the page.
+
+The library quick start now reads the recipient's public key from their identity
+file with `resolveRecipient`, so it runs as written after the CLI `keygen` step.
+The Knightsbridge Law link now points at knightsbridgelaw.com.
+
+Every GitHub Action in CI is now pinned by commit SHA, as the page states.
+
 ## 1.1.5
 
 Documentation. No source change.
