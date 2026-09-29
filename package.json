@@ -84,5 +84,8 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
   }
 }
