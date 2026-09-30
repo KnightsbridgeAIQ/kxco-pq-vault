@@ -20,7 +20,14 @@ export function decodePublicKey(str) {
   if (decoded.prefix !== HRP) {
     throw new KxcoVaultError(`invalid recipient prefix: expected "${HRP}", got "${decoded.prefix}"`)
   }
-  const bytes = Buffer.from(bech32m.fromWords(decoded.words))
+  // A string can carry a valid checksum and still not turn back into bytes,
+  // when its padding bits are wrong.
+  let bytes
+  try {
+    bytes = Buffer.from(bech32m.fromWords(decoded.words))
+  } catch (e) {
+    throw new KxcoVaultError(`invalid recipient string: ${e.message}`)
+  }
   if (bytes.length !== PUBKEY_BYTES) {
     throw new KxcoVaultError(`invalid recipient: expected ${PUBKEY_BYTES} bytes, got ${bytes.length}`)
   }

@@ -85,3 +85,35 @@ test('parseHeaderText: throws on wrong version', () => {
   const bad = 'KXCO-VAULT/2.0\nalgorithm: ml-kem-768+aes-256-gcm\nrecipients: 0\n'
   assert.throws(() => parseHeaderText(bad), KxcoVaultError)
 })
+
+test('parseHeaderText: a field that is not hex of its documented length throws KxcoVaultError', () => {
+  const header = (fields) => serializeHeader({
+    recipients: [{ ...SAMPLE_RECIPIENTS[0], ...fields.recipient }],
+    nonce: fields.nonce ?? SAMPLE_NONCE,
+    created: SAMPLE_CREATED,
+  })
+  const cases = [
+    { recipient: { encapsulatedKey: 'aa'.repeat(1087) } },
+    { recipient: { encapsulatedKey: 'aa'.repeat(1087) + 'zz' } },
+    { recipient: { kid: 'aabbccdd1122334' } },
+    { recipient: { kid: 'aabbccdd1122334g' } },
+    { recipient: { wrappedDek: 'bb'.repeat(47) } },
+    { nonce: '' },
+    { nonce: 'zz'.repeat(12) },
+    { nonce: 'cc'.repeat(16) },
+  ]
+  for (const fields of cases) {
+    assert.throws(() => parseHeaderText(header(fields)), KxcoVaultError, JSON.stringify(fields).slice(0, 80))
+  }
+})
+
+test('parseEnvelope: accepts a Uint8Array as well as a Buffer', () => {
+  const headerText = serializeHeader({ recipients: SAMPLE_RECIPIENTS, nonce: SAMPLE_NONCE, created: SAMPLE_CREATED })
+  const sep = Buffer.from('--- BEGIN CIPHERTEXT ---\n', 'utf-8')
+  const buf = Buffer.concat([Buffer.from(headerText, 'utf-8'), sep, Buffer.from([1, 2, 3, 4, 5])])
+
+  const { header, canonicalHeader, ciphertext } = parseEnvelope(new Uint8Array(buf))
+  assert.equal(header.nonce, SAMPLE_NONCE)
+  assert.deepEqual(Buffer.from(ciphertext), Buffer.from([1, 2, 3, 4, 5]))
+  assert.equal(Buffer.from(canonicalHeader).toString('utf-8'), headerText)
+})

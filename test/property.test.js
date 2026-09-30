@@ -16,6 +16,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fc from 'fast-check'
+import { bech32m } from '@scure/base'
 import { mlKem } from 'kxco-post-quantum'
 import {
   encodePublicKey, decodePublicKey,
@@ -85,7 +86,9 @@ test('the harness fails a property that is false', () => {
 test('envelope: every recipient opens any payload with their own key and gets it back byte for byte', () => {
   fc.assert(fc.property(payload, recipientSet, (plain, picks) => {
     const envelope = seal(plain, picks.map((i) => POOL[i].publicKey))
-    return picks.every((i) => open(envelope, POOL[i]).equals(Buffer.from(plain)))
+    // As a Buffer, and as the plain Uint8Array index.d.ts also accepts.
+    return picks.every((i) => open(envelope, POOL[i]).equals(Buffer.from(plain)) &&
+      open(new Uint8Array(envelope), POOL[i]).equals(Buffer.from(plain)))
   }), RUNS)
 })
 
@@ -109,7 +112,7 @@ test('envelope: changing any one byte of the header, separator or ciphertext fai
     const envelope = seal(plain, picks.map((i) => POOL[i].publicKey))
     const tampered = Buffer.from(envelope)
     tampered[at % tampered.length] ^= mask
-    for (const i of picks) assert.throws(() => open(tampered, POOL[i]))
+    for (const i of picks) assert.throws(() => open(tampered, POOL[i]), KxcoVaultError)
     return true
   }), RUNS)
 })
@@ -129,6 +132,41 @@ test('recipient strings: a key of any other length is refused with KxcoVaultErro
     assert.throws(() => decodePublicKey(encodePublicKey(bytes)), KxcoVaultError)
     return true
   }), { numRuns: 200 })
+})
+
+test('recipient strings: every checksum-valid kxco1 string either decodes to a key or is refused with KxcoVaultError', () => {
+  // Any run of 5-bit words, and in particular runs the length of a real key
+  // whose padding bits may or may not be zero.
+  const words = fc.oneof(
+    fc.array(fc.integer({ min: 0, max: 31 }), { maxLength: 2000, size: 'max' }),
+    fc.array(fc.integer({ min: 0, max: 31 }), { minLength: 1894, maxLength: 1896 }),
+    fc.tuple(fc.uint8Array({ minLength: 1184, maxLength: 1184 }), fc.integer({ min: 0, max: 31 }))
+      .map(([key, last]) => [...bech32m.toWords(key).slice(0, -1), last]),
+  )
+  fc.assert(fc.property(words, (w) => {
+    let key
+    try {
+      key = decodePublicKey(bech32m.encode('kxco', w, false))
+    } catch (err) {
+      return err instanceof KxcoVaultError
+    }
+    return key.length === 1184
+  }), { numRuns: 300 })
+})
+
+test('decryptPayload: any key, nonce, associated data and payload either opens or is refused with KxcoVaultError', () => {
+  const bytes = (max) => fc.uint8Array({ maxLength: max, size: 'max' }).map((b) => Buffer.from(b))
+  const real = fc.tuple(fc.uint8Array({ minLength: 32, maxLength: 32 }), fc.uint8Array({ minLength: 12, maxLength: 12 }))
+  const key = fc.oneof(real.map(([k]) => Buffer.from(k)), bytes(40))
+  const nonce = fc.oneof(real.map(([, n]) => Buffer.from(n)), bytes(20))
+  fc.assert(fc.property(key, nonce, bytes(64), bytes(300), (k, n, ad, data) => {
+    try {
+      decryptPayload(k, n, ad, data)
+      return false // nothing here was sealed under this key, so nothing opens
+    } catch (err) {
+      return err instanceof KxcoVaultError
+    }
+  }), { numRuns: 500 })
 })
 
 test('header: serializeHeader then parseHeaderText gives back every field', () => {

@@ -247,3 +247,26 @@ test('encrypt + decrypt: empty file', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('decrypt: a truncated encapsulated key fails with KxcoVaultError', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kxco-vault-e2e-'))
+  try {
+    const { path: identity, recipient: recipientStr } = await makeKeypair(dir)
+    const plainFile = join(dir, 'secret.txt')
+    const cipherFile = join(dir, 'secret.txt.kxco')
+    writeFileSync(plainFile, 'top secret', 'utf-8')
+
+    await captureStdout(() => encrypt([plainFile, `--recipient=${recipientStr}`, `--out=${cipherFile}`]))
+
+    // Drop the last two hex characters of the encapsulated key.
+    const content = readFileSync(cipherFile, 'latin1')
+    writeFileSync(cipherFile, content.replace(/^(recipient\[0\]\.encapsulated_key: [0-9a-f]+)[0-9a-f]{2}$/m, '$1'), 'latin1')
+
+    await assert.rejects(
+      () => captureStdout(() => decrypt([cipherFile, `--identity=${identity}`, `--out=${join(dir, 'out.txt')}`])),
+      KxcoVaultError,
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

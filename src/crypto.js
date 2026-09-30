@@ -23,10 +23,12 @@ export function wrapDek(ss, kid, dek) {
 // Unwrap DEK. Throws KxcoVaultError if auth fails.
 export function unwrapDek(ss, kid, wrappedDek) {
   if (wrappedDek.length !== 48) throw new KxcoVaultError('authentication failed: invalid wrapped_dek length')
-  const decipher = createDecipheriv('aes-256-gcm', ss, Buffer.alloc(12))
-  decipher.setAAD(Buffer.from(kid, 'hex'))
-  decipher.setAuthTag(wrappedDek.slice(32))
+  // Setting up the decipher is inside the try as well: a key of the wrong
+  // length is refused there, and is as much a failure to open as a bad tag.
   try {
+    const decipher = createDecipheriv('aes-256-gcm', ss, Buffer.alloc(12))
+    decipher.setAAD(Buffer.from(kid, 'hex'))
+    decipher.setAuthTag(wrappedDek.slice(32))
     return Buffer.concat([decipher.update(wrappedDek.slice(0, 32)), decipher.final()])
   } catch {
     throw new KxcoVaultError('authentication failed')
@@ -45,10 +47,12 @@ export function encryptPayload(dek, nonce, ad, plaintext) {
 // Decrypt payload (ciphertext||tag). Throws KxcoVaultError if auth fails.
 export function decryptPayload(dek, nonce, ad, payload) {
   if (payload.length < 16) throw new KxcoVaultError('authentication failed: ciphertext too short')
-  const decipher = createDecipheriv('aes-256-gcm', dek, nonce)
-  decipher.setAAD(ad)
-  decipher.setAuthTag(payload.slice(-16))
+  // Inside the try as well: an empty nonce or a key of the wrong length is
+  // refused while setting up, and is as much a failure to open as a bad tag.
   try {
+    const decipher = createDecipheriv('aes-256-gcm', dek, nonce)
+    decipher.setAAD(ad)
+    decipher.setAuthTag(payload.slice(-16))
     return Buffer.concat([decipher.update(payload.slice(0, -16)), decipher.final()])
   } catch {
     throw new KxcoVaultError('authentication failed')
