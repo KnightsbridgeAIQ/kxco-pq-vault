@@ -68,6 +68,35 @@ test('encrypt + decrypt: binary file round-trip', async () => {
   }
 })
 
+test('decrypt: an identity whose secret key is damaged fails with KxcoVaultError', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kxco-vault-e2e-'))
+  try {
+    const { path: identity, recipient } = await makeKeypair(dir, 'alice.kxco')
+    const plainFile = join(dir, 'secret.txt')
+    const cipherFile = join(dir, 'secret.txt.kxco')
+    writeFileSync(plainFile, 'secret message', 'utf-8')
+    await captureStdout(() => encrypt([plainFile, `--recipient=${recipient}`, `--out=${cipherFile}`]))
+
+    // Byte 1500 sits in the public key the secret key carries, which ML-KEM
+    // decapsulation checks against the hash stored beside it.
+    const content = readFileSync(identity, 'utf-8')
+    const damaged = content.replace(/^(secret:\s*)([0-9a-fA-F]+)/m, (_, label, hex) => {
+      const at = 1500 * 2
+      const flipped = (parseInt(hex[at], 16) ^ 1).toString(16)
+      return label + hex.slice(0, at) + flipped + hex.slice(at + 1)
+    })
+    assert.notEqual(damaged, content)
+    writeFileSync(identity, damaged, 'utf-8')
+
+    await assert.rejects(
+      () => captureStdout(() => decrypt([cipherFile, `--identity=${identity}`, `--out=${join(dir, 'out.txt')}`])),
+      (err) => err instanceof KxcoVaultError,
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('decrypt: wrong identity throws KxcoVaultError (kid not in envelope)', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'kxco-vault-e2e-'))
   try {

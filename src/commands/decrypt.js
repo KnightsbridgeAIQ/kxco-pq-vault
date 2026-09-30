@@ -59,7 +59,14 @@ export async function decrypt(args) {
   if (!recipientBlock) throw new KxcoVaultError('recipient kid not in envelope')
 
   const mlKemCt = Buffer.from(recipientBlock.encapsulatedKey, 'hex')
-  const ss = Buffer.from(mlKem.decapsulate(mlKemCt, secretKey))
+  let ss
+  try {
+    ss = Buffer.from(mlKem.decapsulate(mlKemCt, secretKey))
+  } catch {
+    // ML-KEM checks the public key the secret key carries against its stored
+    // hash, so a damaged identity file is refused here.
+    throw new KxcoVaultError(`identity secret key is damaged: ${identityPath}`)
+  }
   const wrappedDek = Buffer.from(recipientBlock.wrappedDek, 'hex')
   const dek = unwrapDek(ss, myKid, wrappedDek)
 
