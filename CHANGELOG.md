@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.8
+
+Every malformed recipient string, envelope field and decryption input throws
+KxcoVaultError, as the README states, and decrypt reports a damaged identity
+secret key the same way. The header parser checks each hex field against its
+documented length. parseEnvelope accepts a Uint8Array.
+
 ## 1.1.7
 
 Documentation. No source change.

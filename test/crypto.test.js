@@ -103,3 +103,21 @@ test('decryptPayload: throws on wrong nonce', () => {
   const payload = encryptPayload(dek, nonce, ad, Buffer.from('secret'))
   assert.throws(() => decryptPayload(dek, wrongNonce, ad, payload), KxcoVaultError)
 })
+
+test('decryptPayload: an empty or truncated nonce, or a key of the wrong length, throws KxcoVaultError', () => {
+  const dek = randomBytes(32)
+  const nonce = randomBytes(12)
+  const ad = Buffer.from('header', 'utf-8')
+  const payload = encryptPayload(dek, nonce, ad, Buffer.from('secret'))
+  // Buffer.from(nonceHex, 'hex') stops at the first character that is not hex.
+  for (const bad of [Buffer.alloc(0), Buffer.from('zz'.repeat(12), 'hex')]) {
+    assert.throws(() => decryptPayload(dek, bad, ad, payload), KxcoVaultError)
+  }
+  assert.throws(() => decryptPayload(randomBytes(16), nonce, ad, payload), KxcoVaultError)
+})
+
+test('unwrapDek: a shared secret of the wrong length throws KxcoVaultError', () => {
+  const kid = randomBytes(8).toString('hex')
+  const wrapped = wrapDek(randomBytes(32), kid, randomBytes(32))
+  assert.throws(() => unwrapDek(randomBytes(16), kid, wrapped), KxcoVaultError)
+})

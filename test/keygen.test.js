@@ -5,6 +5,9 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { keygen } from '../src/commands/keygen.js'
 import { recipient } from '../src/commands/recipient.js'
+import { bech32m } from '@scure/base'
+import { decodePublicKey } from '../src/bech32.js'
+import { KxcoVaultError } from '../src/errors.js'
 
 function captureStdout(fn) {
   const chunks = []
@@ -103,5 +106,12 @@ test('recipient: output matches public field in identity file', async () => {
     assert.equal(stdout.trim(), filePub)
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('decodePublicKey: a checksum-valid kxco1 string whose padding is wrong throws KxcoVaultError', () => {
+  // Checksums hold, so the failure is in turning 5-bit words back into bytes.
+  for (const words of [[31], [1, 1], [...Array(1894).fill(0), 1]]) {
+    assert.throws(() => decodePublicKey(bech32m.encode('kxco', words, false)), KxcoVaultError, JSON.stringify(words.slice(-2)))
   }
 })
