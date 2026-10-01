@@ -13,6 +13,7 @@
 Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-768 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key.
 
 - **Built for harvest-now, decrypt-later.** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) names adversaries "collecting United States information now, and decrypting it later once large-scale quantum computers are operational". A vault envelope is pure ML-KEM-768 with no classical step, so a copy taken today holds no classical key exchange to break later.
+- **The requirement it answers.** [OMB M-26-15](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf) tells agencies to prioritise "re-encrypting long-lived sensitive data using keys protected by PQC mechanisms". Archives, backups and ledgers are re-encrypted from the terminal in five lines, shown under [Re-encrypting an archive](#re-encrypting-an-archive).
 - **One envelope, many recipients.** A random 32-byte data key per envelope is wrapped to each recipient's ML-KEM shared secret, so each recipient opens the same plaintext with their own key and nobody shares a secret.
 - **Tampering fails before disclosure.** The whole header is the AES-256-GCM additional authenticated data, so a changed nonce, algorithm line or recipient entry fails decryption before any plaintext is released.
 - **The envelope says what it is.** `KXCO-VAULT/1.0`, an explicit algorithm line and a key id per recipient, so a holder of several keys knows which one applies and a reader years from now knows what produced the file.
@@ -69,6 +70,26 @@ kxco-vault encrypt report.pdf --recipient kxco1qvp93xj... --out report.pdf.kxco
 # Decrypt it
 kxco-vault decrypt report.pdf.kxco --identity alice.kxco --out report.pdf
 ```
+
+### Re-encrypting an archive
+
+The long-lived data OMB M-26-15 names, moved under ML-KEM-768 in five commands:
+
+```bash
+npx kxco-vault keygen --out archive.kxco
+RECIPIENT=$(npx kxco-vault recipient archive.kxco)   # the public recipient string, to share
+npx kxco-vault encrypt ledger-2019.csv --recipient "$RECIPIENT" --out ledger-2019.csv.kxco
+npx kxco-vault inspect ledger-2019.csv.kxco
+npx kxco-vault decrypt ledger-2019.csv.kxco --identity archive.kxco --out restored.csv
+```
+
+```text
+version:    KXCO-VAULT/1.0
+algorithm:  ml-kem-768+aes-256-gcm
+recipients: 1
+```
+
+`restored.csv` comes back byte-identical, and the envelope opens for the identity it was made for and no other. Pass `--recipient` once per key to make one archive readable by a key in each region, with no key shared.
 
 ### Library
 
