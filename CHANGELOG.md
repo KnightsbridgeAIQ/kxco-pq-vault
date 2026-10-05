@@ -1,7 +1,6 @@
 # Changelog
 
-## Unreleased
-
+## 1.2.0
 **ML-KEM-1024 envelopes.** `kxco-vault keygen --algorithm ml-kem-1024` makes a
 Category 5 identity, and an envelope sealed to such keys carries
 `algorithm: ml-kem-1024+aes-256-gcm` with a 1568-byte encapsulated key per
