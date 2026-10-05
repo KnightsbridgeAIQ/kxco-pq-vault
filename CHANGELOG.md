@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.0
+**ML-KEM-1024 envelopes.** `kxco-vault keygen --algorithm ml-kem-1024` makes a
+Category 5 identity, and an envelope sealed to such keys carries
+`algorithm: ml-kem-1024+aes-256-gcm` with a 1568-byte encapsulated key per
+recipient. The recipient's key decides the parameter set: `kxco1...` strings for
+both sets share the prefix and are told apart by length (1184 or 1568 bytes).
+The algorithm line is inside the header, which is the AES-GCM additional data,
+so it is authenticated with the payload.
+
+ML-KEM-768 stays the default. Envelopes and identity files written by earlier
+versions open unchanged, and a test opens an envelope sealed by 1.1.8.
+
+A key of one set is never tried on the other. An envelope cannot mix recipients
+from both sets, decrypt refuses an identity whose set differs from the one the
+envelope names, and an identity file whose `algorithm:` line disagrees with its
+key is refused. An identity file with no `algorithm:` line is read by its key.
+
+`serializeHeader` takes an optional `algorithm`, and `readIdentity` returns the
+identity's parameter set as `algorithm`.
+
 ## 1.1.8
 
 Every malformed recipient string, envelope field and decryption input throws

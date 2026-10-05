@@ -1,10 +1,17 @@
 import { randomBytes } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
-import { mlKem, deriveSeed } from 'kxco-post-quantum'
 import { encodePublicKey } from '../bech32.js'
 import { KxcoVaultError } from '../errors.js'
+import { KEMS, DEFAULT_KEM } from '../kem.js'
 
-const FLAGS = new Set(['out', 'master', 'label'])
+const FLAGS = new Set(['out', 'master', 'label', 'algorithm'])
+
+// The info string random keygen derives under. ML-KEM-768 keeps the one it has
+// always used; ML-KEM-1024 gets its own.
+const RANDOM_INFO = {
+  'ml-kem-768': 'kxco-vault/keygen/v1',
+  'ml-kem-1024': 'kxco-vault/keygen/ml-kem-1024/v1',
+}
 
 function parseFlags(args) {
   const flags = {}
@@ -34,12 +41,19 @@ function parseFlags(args) {
 
 export async function keygen(args) {
   if (args.includes('--help') || args.includes('-h')) {
-    process.stdout.write(`usage: kxco-vault keygen --out <keypair.kxco> [--master <hex> --label <string>]\n`)
+    process.stdout.write(
+      `usage: kxco-vault keygen --out <keypair.kxco> [--master <hex> --label <string>] [--algorithm ml-kem-768|ml-kem-1024]\n`,
+    )
     return 0
   }
 
   const flags = parseFlags(args)
   if (!flags.out) throw new KxcoVaultError('keygen: --out is required')
+  const algorithm = flags.algorithm ?? DEFAULT_KEM
+  if (!Object.hasOwn(KEMS, algorithm)) {
+    throw new KxcoVaultError(`keygen: --algorithm must be ml-kem-768 or ml-kem-1024, got ${algorithm}`)
+  }
+  const kem = KEMS[algorithm].module
 
   let publicKey, secretKey
 
@@ -50,13 +64,13 @@ export async function keygen(args) {
       throw new KxcoVaultError('keygen: --master must be at least 16 hex bytes')
     }
     const masterBytes = Buffer.from(flags.master, 'hex')
-    const result = mlKem.keypairFromMaster(masterBytes, flags.label)
+    const result = kem.keypairFromMaster(masterBytes, flags.label)
     publicKey = result.publicKey
     secretKey = result.secretKey
   } else {
     // Random keygen: generate 32-byte random master, derive 64-byte seed
     const randomMaster = randomBytes(32)
-    const result = mlKem.keypairFromMaster(randomMaster, 'kxco-vault/keygen/v1')
+    const result = kem.keypairFromMaster(randomMaster, RANDOM_INFO[algorithm])
     publicKey = result.publicKey
     secretKey = result.secretKey
   }
@@ -66,7 +80,7 @@ export async function keygen(args) {
 
   const identity = [
     'KXCO-VAULT-IDENTITY/1.0',
-    'algorithm: ml-kem-768',
+    `algorithm: ${algorithm}`,
     `created: ${created}`,
     `public: ${recipient}`,
     `secret: ${Buffer.from(secretKey).toString('hex')}`,

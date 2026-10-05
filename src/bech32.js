@@ -1,8 +1,10 @@
 import { bech32m } from '@scure/base'
 import { KxcoVaultError } from './errors.js'
+import { kemForPublicKey } from './kem.js'
 
+// One prefix for both parameter sets: the decoded length says which one a key
+// is, 1184 bytes for ML-KEM-768 and 1568 for ML-KEM-1024.
 const HRP = 'kxco'
-const PUBKEY_BYTES = 1184 // ML-KEM-768 public key
 const LIMIT = false      // disable default 90-char cap
 
 export function encodePublicKey(pubkeyBytes) {
@@ -28,8 +30,6 @@ export function decodePublicKey(str) {
   } catch (e) {
     throw new KxcoVaultError(`invalid recipient string: ${e.message}`)
   }
-  if (bytes.length !== PUBKEY_BYTES) {
-    throw new KxcoVaultError(`invalid recipient: expected ${PUBKEY_BYTES} bytes, got ${bytes.length}`)
-  }
+  kemForPublicKey(bytes)
   return bytes
 }

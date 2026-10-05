@@ -125,9 +125,14 @@ test('recipient strings: encodePublicKey then decodePublicKey gives back the sam
 })
 
 test('recipient strings: a key of any other length is refused with KxcoVaultError', () => {
-  // Any length up to twice a key, with extra weight just either side of 1184.
-  const length = fc.oneof(fc.integer({ min: 0, max: 2400 }), fc.integer({ min: 1180, max: 1188 }))
-  const wrongSize = length.filter((n) => n !== 1184).chain((n) => fc.uint8Array({ minLength: n, maxLength: n }))
+  // Any length up to twice a key, with extra weight just either side of 1184
+  // (ML-KEM-768) and 1568 (ML-KEM-1024), the two lengths a key can be.
+  const length = fc.oneof(
+    fc.integer({ min: 0, max: 3200 }),
+    fc.integer({ min: 1180, max: 1188 }),
+    fc.integer({ min: 1564, max: 1572 }),
+  )
+  const wrongSize = length.filter((n) => n !== 1184 && n !== 1568).chain((n) => fc.uint8Array({ minLength: n, maxLength: n }))
   fc.assert(fc.property(wrongSize, (bytes) => {
     assert.throws(() => decodePublicKey(encodePublicKey(bytes)), KxcoVaultError)
     return true
@@ -150,7 +155,7 @@ test('recipient strings: every checksum-valid kxco1 string either decodes to a k
     } catch (err) {
       return err instanceof KxcoVaultError
     }
-    return key.length === 1184
+    return key.length === 1184 || key.length === 1568
   }), { numRuns: 300 })
 })
 
