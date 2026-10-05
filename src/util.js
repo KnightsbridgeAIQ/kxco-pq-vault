@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { decodePublicKey } from './bech32.js'
 import { KxcoVaultError } from './errors.js'
+import { KEMS, kemForPublicKey } from './kem.js'
 
 export function readFileBytes(path) {
   try {
@@ -29,7 +30,11 @@ export function resolveRecipient(str) {
   return decodePublicKey(str)
 }
 
-// Parse an identity file (keypair.kxco) and return { publicKey, secretKey }
+// Parse an identity file (keypair.kxco) and return
+// { publicKey, secretKey, algorithm }, where algorithm is 'ml-kem-768' or
+// 'ml-kem-1024'. The public key decides the parameter set; an `algorithm:`
+// line that names the other one is refused, and a file without the line is
+// read by its key alone.
 export function readIdentity(path) {
   const content = readFileText(path)
   if (!content.startsWith('KXCO-VAULT-IDENTITY/')) {
@@ -39,9 +44,17 @@ export function readIdentity(path) {
   const secMatch = content.match(/^secret:\s*([0-9a-fA-F]+)/m)
   if (!pubMatch || !secMatch) throw new KxcoVaultError(`malformed identity file: ${path}`)
   const publicKey = decodePublicKey(pubMatch[1])
-  const secretKey = Buffer.from(secMatch[1], 'hex')
-  if (secretKey.length !== 2400) {
-    throw new KxcoVaultError(`invalid secret key length in ${path}: expected 2400 bytes, got ${secretKey.length}`)
+  const algorithm = kemForPublicKey(publicKey)
+  const algMatch = content.match(/^algorithm:\s*(\S+)/m)
+  if (algMatch && algMatch[1] !== algorithm) {
+    throw new KxcoVaultError(
+      `identity file ${path} says ${algMatch[1]} but its public key is ${algorithm}`,
+    )
   }
-  return { publicKey, secretKey }
+  const secretKey = Buffer.from(secMatch[1], 'hex')
+  const expected = KEMS[algorithm].secretKeyBytes
+  if (secretKey.length !== expected) {
+    throw new KxcoVaultError(`invalid secret key length in ${path}: expected ${expected} bytes, got ${secretKey.length}`)
+  }
+  return { publicKey, secretKey, algorithm }
 }

@@ -181,11 +181,11 @@ All exports are named. Import what you need from `kxco-pq-vault`.
 
 #### `encodePublicKey(pubkeyBytes: Buffer): string`
 
-Encodes a 1184-byte ML-KEM-768 public key as a `kxco1...` bech32m string suitable for sharing as a recipient identifier.
+Encodes a 1184-byte ML-KEM-768 or 1568-byte ML-KEM-1024 public key as a `kxco1...` bech32m string suitable for sharing as a recipient identifier. The two sets share the prefix; the decoded length says which one a key is.
 
 #### `decodePublicKey(str: string): Buffer`
 
-Decodes a `kxco1...` bech32m string back to raw public key bytes. Throws `KxcoVaultError` if the string is malformed or the wrong length.
+Decodes a `kxco1...` bech32m string back to raw public key bytes. Throws `KxcoVaultError` if the string is malformed or decodes to neither 1184 (ML-KEM-768) nor 1568 (ML-KEM-1024) bytes.
 
 ### Crypto primitives
 
@@ -219,9 +219,9 @@ Decrypts a payload produced by `encryptPayload`. Throws `KxcoVaultError` if auth
 
 ### Envelope helpers
 
-#### `serializeHeader({ recipients, nonce, created }): string`
+#### `serializeHeader({ recipients, nonce, created, algorithm? }): string`
 
-Produces the canonical plain-text header for an envelope. `recipients` is an array of `{ kid, encapsulatedKey, wrappedDek }` (all hex strings). `nonce` and `created` are hex and ISO 8601 strings respectively.
+Produces the canonical plain-text header for an envelope. `recipients` is an array of `{ kid, encapsulatedKey, wrappedDek }` (all hex strings). `nonce` and `created` are hex and ISO 8601 strings respectively. `algorithm` is `'ml-kem-768+aes-256-gcm'` (the default) or `'ml-kem-1024+aes-256-gcm'`. It must match the parameter set of every recipient's key, and any other value throws `KxcoVaultError`.
 
 #### `parseEnvelope(buf: Buffer): { header, canonicalHeader, ciphertext }`
 
@@ -229,13 +229,13 @@ Splits an envelope buffer, the bytes of a `.kxco` file, into its parsed header o
 
 #### `parseHeaderText(text: string): object`
 
-Parses just the text portion of a header (without the binary ciphertext). Useful for inspection without decryption.
+Parses just the text portion of a header (without the binary ciphertext). Useful for inspection without decryption. Each `encapsulated_key` is checked against the length its algorithm line fixes: 1088 bytes for ML-KEM-768, 1568 for ML-KEM-1024.
 
 ### Identity and recipient helpers
 
-#### `readIdentity(path: string): { publicKey: Buffer, secretKey: Buffer }`
+#### `readIdentity(path: string): { publicKey: Buffer, secretKey: Buffer, algorithm: 'ml-kem-768' | 'ml-kem-1024' }`
 
-Reads an identity file such as `keypair.kxco` and returns the parsed public and secret key buffers. Throws `KxcoVaultError` if the file is missing, malformed, or contains a key of the wrong length.
+Reads an identity file such as `keypair.kxco` and returns the parsed public and secret key buffers and the parameter set, which the public key's length decides. Throws `KxcoVaultError` if the file is missing, malformed, contains a key of the wrong length, or names the other set on its `algorithm:` line. A file with no `algorithm:` line is read by its key alone.
 
 #### `resolveRecipient(str: string): Buffer`
 
@@ -256,9 +256,10 @@ All errors thrown by this library use `KxcoVaultError` (extends `Error`, `name =
 ```sh
 kxco-vault keygen --out <keypair.kxco>
 kxco-vault keygen --out <keypair.kxco> --master <hex> --label <string>
+kxco-vault keygen --out <keypair.kxco> --algorithm ml-kem-1024
 ```
 
-Generates an ML-KEM-768 keypair and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs always produce the same keypair.
+Generates an ML-KEM-768 keypair, or an ML-KEM-1024 one with `--algorithm ml-kem-1024`, and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs always produce the same keypair.
 
 ### `recipient`
 
@@ -274,7 +275,7 @@ Prints the `kxco1...` recipient string from an identity file.
 kxco-vault encrypt <file> --recipient <kxco1...|@keyfile> [--recipient ...] [--out <file.kxco>]
 ```
 
-Encrypts a file for one or more recipients. Multiple `--recipient` flags produce a multi-recipient envelope; each recipient can independently decrypt the same plaintext.
+Encrypts a file for one or more recipients. Multiple `--recipient` flags produce a multi-recipient envelope; each recipient can independently decrypt the same plaintext. The recipients' keys decide the algorithm line: ML-KEM-768 keys give `ml-kem-768+aes-256-gcm`, ML-KEM-1024 keys give `ml-kem-1024+aes-256-gcm`. An envelope names one parameter set, so recipients from both sets are refused; encrypt once for each.
 
 ### `decrypt`
 
@@ -282,7 +283,7 @@ Encrypts a file for one or more recipients. Multiple `--recipient` flags produce
 kxco-vault decrypt <file.kxco> --identity <keypair.kxco> [--out <file>]
 ```
 
-Decrypts an envelope. Fails cleanly if the identity is not a recipient or the envelope has been tampered with.
+Decrypts an envelope. Fails cleanly if the identity is not a recipient, if its key is of the other parameter set from the one the envelope names, or if the envelope has been tampered with.
 
 ### `inspect`
 
@@ -301,7 +302,7 @@ KXCO-VAULT/1.0
 algorithm: ml-kem-768+aes-256-gcm
 recipients: 1
 recipient[0].kid: <16 hex chars>
-recipient[0].encapsulated_key: <hex: 1088-byte ML-KEM-768 ciphertext>
+recipient[0].encapsulated_key: <hex: 1088-byte ML-KEM-768 ciphertext, or 1568 bytes under ml-kem-1024+aes-256-gcm>
 recipient[0].wrapped_dek: <hex: 48 bytes>
 nonce: <hex: 12 bytes>
 created: 2026-05-28T00:00:00Z
@@ -314,6 +315,7 @@ The entire header is used as GCM additional authenticated data. Modifying any fi
 ## Crypto design
 
 - **ML-KEM-768** (NIST FIPS 203): Security Category 3, equivalent to AES-192. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
+- **ML-KEM-1024** (NIST FIPS 203), optional: Security Category 5. Chosen by the recipient's key (`keygen --algorithm ml-kem-1024`), named on the envelope's algorithm line as `ml-kem-1024+aes-256-gcm`, and otherwise the same construction. ML-KEM-768 stays the default, and an envelope written before ML-KEM-1024 was added opens exactly as before.
 - **AES-256-GCM**: AEAD symmetric encryption of the payload.
 - **DEK wrapping**: a random 32-byte data encryption key is generated per envelope. Each recipient's ML-KEM shared secret wraps the DEK independently. All recipients decrypt the same plaintext.
 - **Header integrity**: the full canonical header is bound as GCM additional authenticated data, linking header and ciphertext together.

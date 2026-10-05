@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { mlKem } from 'kxco-post-quantum'
 import { serializeHeader } from '../envelope.js'
 import { generateDek, generateNonce, computeKid, wrapDek, encryptPayload } from '../crypto.js'
 import { resolveRecipient } from '../util.js'
 import { KxcoVaultError } from '../errors.js'
+import { KEMS, kemForPublicKey } from '../kem.js'
 
 const SEPARATOR = Buffer.from('--- BEGIN CIPHERTEXT ---\n', 'utf-8')
 
@@ -64,10 +64,22 @@ export async function encrypt(args) {
   const nonce = generateNonce()
   const created = new Date().toISOString().replace(/\.\d+Z$/, 'Z')
 
-  const recipientBlocks = recipientStrs.map((str) => {
-    const pubkeyBytes = resolveRecipient(str)
+  // Each recipient's key decides its parameter set, and an envelope carries
+  // one algorithm line, so every recipient has to share a set.
+  const recipientKeys = recipientStrs.map(resolveRecipient)
+  const sets = new Set(recipientKeys.map(kemForPublicKey))
+  if (sets.size > 1) {
+    throw new KxcoVaultError(
+      'encrypt: recipients mix ML-KEM-768 and ML-KEM-1024 keys; an envelope uses one ' +
+      'parameter set, so encrypt separately for each',
+    )
+  }
+  const [algorithm] = sets
+  const kem = KEMS[algorithm]
+
+  const recipientBlocks = recipientKeys.map((pubkeyBytes) => {
     const kid = computeKid(pubkeyBytes)
-    const { ciphertext: mlKemCt, sharedSecret: ss } = mlKem.encapsulate(pubkeyBytes)
+    const { ciphertext: mlKemCt, sharedSecret: ss } = kem.module.encapsulate(pubkeyBytes)
     const wrappedDek = wrapDek(Buffer.from(ss), kid, dek)
     return {
       kid,
@@ -76,7 +88,9 @@ export async function encrypt(args) {
     }
   })
 
-  const headerText = serializeHeader({ recipients: recipientBlocks, nonce: nonce.toString('hex'), created })
+  const headerText = serializeHeader({
+    recipients: recipientBlocks, nonce: nonce.toString('hex'), created, algorithm: kem.suite,
+  })
   const canonicalHeader = Buffer.from(headerText, 'utf-8')
   const payload = encryptPayload(dek, nonce, canonicalHeader, plaintext)
 

@@ -1,12 +1,14 @@
 import { KxcoVaultError } from './errors.js'
+import { KEMS, DEFAULT_KEM, kemForSuite } from './kem.js'
 
 const SEPARATOR = '--- BEGIN CIPHERTEXT ---\n'
 const VERSION = 'KXCO-VAULT/1.0'
-const ALGORITHM = 'ml-kem-768+aes-256-gcm'
 
-// Field sizes, in bytes, as the README's envelope format gives them.
+// Field sizes, in bytes, as the README's envelope format gives them. The
+// encapsulated key is the ML-KEM ciphertext, so its size comes from the
+// parameter set the algorithm line names: 1088 for ML-KEM-768, 1568 for
+// ML-KEM-1024.
 const KID_BYTES = 8
-const ENCAPSULATED_KEY_BYTES = 1088 // ML-KEM-768 ciphertext
 const WRAPPED_DEK_BYTES = 48        // 32-byte DEK + 16-byte GCM tag
 const NONCE_BYTES = 12
 
@@ -14,10 +16,12 @@ const NONCE_BYTES = 12
 // recipients: [{ kid, encapsulatedKey, wrappedDek }]   (all hex strings)
 // nonce: hex string (24 chars = 12 bytes)
 // created: ISO 8601 string
-export function serializeHeader({ recipients, nonce, created }) {
+// algorithm: 'ml-kem-768+aes-256-gcm' (the default) or 'ml-kem-1024+aes-256-gcm'
+export function serializeHeader({ recipients, nonce, created, algorithm = KEMS[DEFAULT_KEM].suite }) {
+  kemForSuite(algorithm)
   const lines = [
     VERSION,
-    `algorithm: ${ALGORITHM}`,
+    `algorithm: ${algorithm}`,
     `recipients: ${recipients.length}`,
   ]
   for (let i = 0; i < recipients.length; i++) {
@@ -61,8 +65,12 @@ export function parseHeaderText(text) {
     return line.slice(key.length + 2)
   }
 
+  // The algorithm line is inside the header, and the header is the AES-GCM
+  // additional data, so a line changed to name the other parameter set is
+  // refused, by the field lengths below or by authentication, rather than
+  // being believed.
   const algorithm = get('algorithm')
-  if (algorithm !== ALGORITHM) throw new KxcoVaultError(`unsupported algorithm: ${algorithm}`)
+  const encapsulatedKeyBytes = KEMS[kemForSuite(algorithm)].ciphertextBytes
 
   const nRecipients = parseInt(get('recipients'), 10)
   if (!Number.isFinite(nRecipients) || nRecipients < 1) {
@@ -84,7 +92,7 @@ export function parseHeaderText(text) {
   const recipients = []
   for (let i = 0; i < nRecipients; i++) {
     const kid = hexField(`recipient[${i}].kid`, KID_BYTES)
-    const encapsulatedKey = hexField(`recipient[${i}].encapsulated_key`, ENCAPSULATED_KEY_BYTES)
+    const encapsulatedKey = hexField(`recipient[${i}].encapsulated_key`, encapsulatedKeyBytes)
     const wrappedDek = hexField(`recipient[${i}].wrapped_dek`, WRAPPED_DEK_BYTES)
     recipients.push({ kid, encapsulatedKey, wrappedDek })
   }

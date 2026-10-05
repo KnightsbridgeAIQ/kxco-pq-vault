@@ -1,9 +1,9 @@
 import { writeFileSync } from 'node:fs'
-import { mlKem } from 'kxco-post-quantum'
 import { parseEnvelope } from '../envelope.js'
 import { computeKid, unwrapDek, decryptPayload } from '../crypto.js'
 import { readFileBytes, readIdentity } from '../util.js'
 import { KxcoVaultError } from '../errors.js'
+import { KEMS, kemForSuite } from '../kem.js'
 
 function parseArgs(args) {
   let inputFile = null
@@ -49,11 +49,17 @@ export async function decrypt(args) {
   if (!inputFile) throw new KxcoVaultError('decrypt: input file required')
   if (!identityPath) throw new KxcoVaultError('decrypt: --identity is required')
 
-  const { publicKey, secretKey } = readIdentity(identityPath)
+  const { publicKey, secretKey, algorithm } = readIdentity(identityPath)
   const myKid = computeKid(publicKey)
 
   const buf = readFileBytes(inputFile)
   const { header, canonicalHeader, ciphertext } = parseEnvelope(buf)
+
+  // The identity's key decides which parameter set it can open, and the
+  // envelope names its own; a key of one set is never tried on the other.
+  if (kemForSuite(header.algorithm) !== algorithm) {
+    throw new KxcoVaultError(`identity is ${algorithm} but the envelope is ${header.algorithm}`)
+  }
 
   const recipientBlock = header.recipients.find(r => r.kid === myKid)
   if (!recipientBlock) throw new KxcoVaultError('recipient kid not in envelope')
@@ -61,7 +67,7 @@ export async function decrypt(args) {
   const mlKemCt = Buffer.from(recipientBlock.encapsulatedKey, 'hex')
   let ss
   try {
-    ss = Buffer.from(mlKem.decapsulate(mlKemCt, secretKey))
+    ss = Buffer.from(KEMS[algorithm].module.decapsulate(mlKemCt, secretKey))
   } catch {
     // ML-KEM checks the public key the secret key carries against its stored
     // hash, so a damaged identity file is refused here.
