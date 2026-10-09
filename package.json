@@ -1,6 +1,6 @@
 {
   "name": "kxco-pq-vault",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Post-quantum file and envelope encryption, like PGP: ML-KEM-768 (NIST FIPS 203) to one recipient or many, each opening it with their own key, with no classical step for a harvest-now-decrypt-later adversary to break. AES-256-GCM payloads, bech32m recipient strings, a CLI and a library.",
   "keywords": [
     "post-quantum",
@@ -69,7 +69,7 @@
     "ASSESSMENT.md"
   ],
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.12"
   },
   "dependencies": {
     "@scure/base": "2.4.0",
