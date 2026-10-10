@@ -10,7 +10,7 @@ and publishes the lot. Cited here, proven there.
 
 ## What this package is
 
-File and envelope encryption to one or more ML-KEM-768 public keys. Like PGP,
+File and envelope encryption to one or more ML-KEM-1024 or ML-KEM-768 public keys. Like PGP,
 quantum-safe.
 
 **This is the package the harvest-now-decrypt-later argument is actually
@@ -42,7 +42,7 @@ of plaintext is released. Tamper evidence that fires before disclosure, not
 after.
 
 **The envelope says what it is.** `KXCO-VAULT/1.0`, an explicit `algorithm:
-ml-kem-768+aes-256-gcm` line, and a `kid` per recipient. A holder of several
+ml-kem-1024+aes-256-gcm` (or `ml-kem-768+aes-256-gcm`) line, and a `kid` per recipient. A holder of several
 keys knows which one applies; a reader in five years knows what produced the
 file without having to guess.
 
@@ -94,7 +94,7 @@ from `npm run evidence` recording identity, the test run, the SBOM and the
 
 **Supported versions.** One line moving forward. Fixes land in the next release.
 
-**Cost.** No hardware ceiling. ML-KEM-768 work is per recipient, not per byte,
+**Cost.** No hardware ceiling. ML-KEM work is per recipient, not per byte,
 so envelope size and encryption time are dominated by AES-256-GCM over the
 payload. Many recipients on one envelope scale linearly and cheaply.
 

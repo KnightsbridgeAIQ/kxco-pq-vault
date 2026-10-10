@@ -10,7 +10,7 @@
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 [![node](https://img.shields.io/node/v/kxco-pq-vault.svg)](https://nodejs.org)
 
-Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-1024 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key. New keys in KXCO's packages and platform services use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting.
+Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-1024 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key. New keys made with kxco-pq-vault use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting.
 
 - **Built for harvest-now, decrypt-later.** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) names adversaries "collecting United States information now, and decrypting it later once large-scale quantum computers are operational". A vault envelope is pure ML-KEM, ML-KEM-1024 by default, with no classical step, so a copy taken today holds no classical key exchange to break later.
 - **The requirement it answers.** [OMB M-26-15](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf) tells agencies to prioritise "re-encrypting long-lived sensitive data using keys protected by PQC mechanisms". Archives, backups and ledgers are re-encrypted from the terminal in five lines, shown under [Re-encrypting an archive](#re-encrypting-an-archive).
@@ -318,7 +318,7 @@ The entire header is used as GCM additional authenticated data. Modifying any fi
 
 ## Crypto design
 
-- **ML-KEM-1024** (NIST FIPS 203), the default. New keys in KXCO's packages and platform services use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
+- **ML-KEM-1024** (NIST FIPS 203), the default. New keys made with kxco-pq-vault use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
 - **ML-KEM-768** (NIST FIPS 203): Security Category 3, equivalent to AES-192. Chosen by the recipient's key (`keygen --algorithm ml-kem-768`, or any key made by 1.3.0 or earlier without `--algorithm`), named on the envelope's algorithm line as `ml-kem-768+aes-256-gcm`, and otherwise the same construction. Identities and envelopes written by earlier versions open exactly as before.
 - **AES-256-GCM**: AEAD symmetric encryption of the payload.
 - **DEK wrapping**: a random 32-byte data encryption key is generated per envelope. Each recipient's ML-KEM shared secret wraps the DEK independently. All recipients decrypt the same plaintext.

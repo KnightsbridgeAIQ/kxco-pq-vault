@@ -20,7 +20,7 @@ extortion, data sale, or public disclosure ahead of the window below.
 
 ## Scope
 In scope:
-- Cryptographic correctness of the envelope construction (ML-KEM-768 key
+- Cryptographic correctness of the envelope construction (ML-KEM-1024 and ML-KEM-768 key
   encapsulation, AES-GCM content encryption, and how the two are bound)
 - Multi-recipient handling: whether one recipient can recover another
   recipient's key material, or alter the recipient set undetected
@@ -30,7 +30,7 @@ In scope:
 - Key material handling in the CLI: argument, environment and file paths
 
 Out of scope (report upstream to <https://github.com/paulmillr/noble-post-quantum>):
-- Bugs in the underlying ML-KEM-768 primitive
+- Bugs in the underlying ML-KEM-1024 and ML-KEM-768 primitives
 
 Out of scope (report upstream to <https://github.com/paulmillr/scure-base>):
 - Bugs in the underlying Bech32m implementation
