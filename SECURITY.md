@@ -56,9 +56,10 @@ plaintext before encryption.
 
 | Version | Supported |
 |---|---|
-| 1.1.x | yes |
-| 1.0.x | security fixes only |
-| < 1.0 | no |
+| 2.0.x | yes |
+| < 2.0 | no |
+
+Every envelope and identity made by a 1.x release decrypts with 2.0.x, so moving to 2.0.x loses nothing.
 
 ## Disclosure window
 We ask for **90 days** before public disclosure, or until a fix ships if
