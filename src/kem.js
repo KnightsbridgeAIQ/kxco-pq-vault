@@ -4,8 +4,9 @@ import { KxcoVaultError } from './errors.js'
 // The two ML-KEM parameter sets a vault key can be, and what each one fixes.
 // The key decides: a public key's length says which set it belongs to, and
 // that set decides the envelope's algorithm line and the size of every field
-// it writes. ML-KEM-768 is the default, so an identity or envelope made before
-// ML-KEM-1024 existed here reads exactly as it always did.
+// it writes. New keys default to ML-KEM-1024. Because the key, not the default,
+// decides the set, an ML-KEM-768 identity or envelope made earlier reads
+// exactly as it always did.
 export const KEMS = Object.freeze({
   'ml-kem-768': Object.freeze({
     module: mlKem,
@@ -23,7 +24,7 @@ export const KEMS = Object.freeze({
   }),
 })
 
-export const DEFAULT_KEM = 'ml-kem-768'
+export const DEFAULT_KEM = 'ml-kem-1024'
 
 /** The parameter set a public key of this length belongs to. */
 export function kemForPublicKey(publicKey) {

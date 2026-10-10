@@ -227,7 +227,7 @@ test('inspect: shows correct header info', async () => {
     const { rc, out } = await captureStdout(() => inspect([cipherFile]))
     assert.equal(rc, 0)
     assert.ok(out.includes('KXCO-VAULT/1.0'))
-    assert.ok(out.includes('ml-kem-768+aes-256-gcm'))
+    assert.ok(out.includes('ml-kem-1024+aes-256-gcm'))
     assert.ok(out.includes('recipients: 1'))
     assert.ok(out.includes('ciphertext:'))
   } finally {

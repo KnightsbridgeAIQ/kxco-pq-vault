@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0 (2026-10-10)
+
+**Breaking changes**
+
+- New keys default to ML-KEM-1024 (keygen output grows from 1184 to 1568 bytes).
+- `keygen --master --label` without `--algorithm` now derives an ML-KEM-1024 key; pass `--algorithm ml-kem-768` to re-derive a key made before 2.0.0.
+- `serializeHeader` throws on disagreeing or mixed inputs that 1.3.0 accepted and turned into unreadable headers.
+
+**What does not change**
+
+- Every 1.x envelope and identity decrypts.
+- `--algorithm ml-kem-768` still makes an ML-KEM-768 identity.
+
+**Detail**
+
+- An ML-KEM-1024 secret key is 3168 bytes (ML-KEM-768: 2400), and each recipient's encapsulated key in an envelope is 1568 bytes (ML-KEM-768: 1088).
+- The key, not the default, decides the parameter set, as it has since 1.2.0, so nothing a 1.x release wrote changes meaning.
+- `keygen --master` without `--algorithm` prints one line to stderr saying the default changed. Stdout is unchanged, so a script that reads it gets the same bytes.
+- With no `algorithm`, `serializeHeader` takes the set from the encapsulated keys' length, and it also refuses a key of neither length. The header is the AES-GCM additional data, so a wrong algorithm line could never be corrected. The CLI always passed the right `algorithm`, so CLI users were never exposed.
+- The evidence is in `test/fixtures`: an identity, an envelope and a `--master` key made by the latest release of each 1.x line (1.0.8, 1.1.8, 1.2.0 and 1.3.0) with its own CLI, plus 1.2.0's ML-KEM-1024 ones. The tests open every envelope byte for byte and derive every `--master` key again, and 1.3.0 opens an envelope 2.0.0 seals to its key.
+- The README and typings lead with ML-KEM-1024, SECURITY.md and ASSESSMENT.md name both sets, and SECURITY.md lists 2.0.x as the supported line.
+
 ## 1.3.0 (2026-10-09)
 
 Runtime support. No change to the API or its behaviour.

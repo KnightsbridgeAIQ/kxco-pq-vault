@@ -3,10 +3,10 @@ import { fileURLToPath } from 'node:url'
 import { join, dirname } from 'node:path'
 
 const USAGE = `
-kxco-vault: post-quantum file encryption (ML-KEM-768 or ML-KEM-1024, with AES-256-GCM)
+kxco-vault: post-quantum file encryption (ML-KEM-1024 or ML-KEM-768, with AES-256-GCM)
 
 commands:
-  keygen     generate an ML-KEM-768 (default) or ML-KEM-1024 identity keypair
+  keygen     generate an ML-KEM-1024 (default) or ML-KEM-768 identity keypair
   encrypt    encrypt a file for one or more recipients
   decrypt    decrypt a file with your identity
   recipient  extract the public recipient string from an identity file

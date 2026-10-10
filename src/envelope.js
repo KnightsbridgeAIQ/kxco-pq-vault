@@ -1,5 +1,5 @@
 import { KxcoVaultError } from './errors.js'
-import { KEMS, DEFAULT_KEM, kemForSuite } from './kem.js'
+import { KEMS, kemForSuite } from './kem.js'
 
 const SEPARATOR = '--- BEGIN CIPHERTEXT ---\n'
 const VERSION = 'KXCO-VAULT/1.0'
@@ -12,16 +12,50 @@ const KID_BYTES = 8
 const WRAPPED_DEK_BYTES = 48        // 32-byte DEK + 16-byte GCM tag
 const NONCE_BYTES = 12
 
+// The parameter set the recipients' keys were encapsulated under, told by the
+// length of each encapsulated key. An envelope carries one algorithm line, so
+// every recipient has to share one set.
+function kemForEncapsulatedKeys(recipients) {
+  const sets = new Set(recipients.map((r) => {
+    const bytes = r.encapsulatedKey.length / 2
+    const name = Object.keys(KEMS).find((k) => KEMS[k].ciphertextBytes === bytes)
+    if (!name) {
+      throw new KxcoVaultError(
+        `serializeHeader: an encapsulated key must be ${KEMS['ml-kem-768'].ciphertextBytes} (ML-KEM-768) ` +
+        `or ${KEMS['ml-kem-1024'].ciphertextBytes} (ML-KEM-1024) bytes, got ${bytes}`,
+      )
+    }
+    return name
+  }))
+  if (sets.size === 0) throw new KxcoVaultError('serializeHeader: an envelope needs at least one recipient')
+  if (sets.size > 1) {
+    throw new KxcoVaultError(
+      'serializeHeader: recipients mix ML-KEM-768 and ML-KEM-1024 encapsulated keys; an envelope uses one parameter set',
+    )
+  }
+  return [...sets][0]
+}
+
 // Serialize a header object to a UTF-8 string (no separator line).
 // recipients: [{ kid, encapsulatedKey, wrappedDek }]   (all hex strings)
 // nonce: hex string (24 chars = 12 bytes)
 // created: ISO 8601 string
-// algorithm: 'ml-kem-768+aes-256-gcm' (the default) or 'ml-kem-1024+aes-256-gcm'
-export function serializeHeader({ recipients, nonce, created, algorithm = KEMS[DEFAULT_KEM].suite }) {
-  kemForSuite(algorithm)
+// algorithm: optional. The header is the AES-GCM additional data, so an
+// algorithm line naming the wrong set could never be corrected once a payload
+// is sealed under it. The encapsulated keys decide it instead: 1088 bytes is
+// 'ml-kem-768+aes-256-gcm' and 1568 is 'ml-kem-1024+aes-256-gcm'. A passed
+// algorithm that disagrees with them is refused.
+export function serializeHeader({ recipients, nonce, created, algorithm }) {
+  const suite = KEMS[kemForEncapsulatedKeys(recipients)].suite
+  if (algorithm !== undefined && algorithm !== suite) {
+    kemForSuite(algorithm) // an unknown name keeps its own error
+    throw new KxcoVaultError(
+      `serializeHeader: algorithm ${algorithm} disagrees with the encapsulated keys, which are ${suite}`,
+    )
+  }
   const lines = [
     VERSION,
-    `algorithm: ${algorithm}`,
+    `algorithm: ${suite}`,
     `recipients: ${recipients.length}`,
   ]
   for (let i = 0; i < recipients.length; i++) {

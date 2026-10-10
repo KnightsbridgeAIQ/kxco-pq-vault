@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { keygen } from '../src/commands/keygen.js'
 import { encrypt } from '../src/commands/encrypt.js'
 import { decrypt } from '../src/commands/decrypt.js'
@@ -13,13 +15,20 @@ import { readIdentity } from '../src/util.js'
 import { KxcoVaultError } from '../src/errors.js'
 
 const LEGACY = JSON.parse(readFileSync(new URL('./fixtures/legacy-768.json', import.meta.url), 'utf-8'))
+// Made by the released kxco-pq-vault 1.3.0 from npm, at commit e6a2629, by the
+// single-release form of test/fixtures/make-vault-fixtures.mjs.
+const V130 = JSON.parse(readFileSync(new URL('./fixtures/vault-1.3.0-ml-kem-768.json', import.meta.url), 'utf-8'))
 
+// stderr is collected too, so keygen's --master notice stays out of the test log.
 function captureStdout(fn) {
   const chunks = []
+  const errChunks = []
   const orig = process.stdout.write.bind(process.stdout)
+  const origErr = process.stderr.write.bind(process.stderr)
   process.stdout.write = (chunk) => { chunks.push(String(chunk)); return true }
-  return Promise.resolve(fn()).finally(() => { process.stdout.write = orig })
-    .then((rc) => ({ rc, out: chunks.join('') }))
+  process.stderr.write = (chunk) => { errChunks.push(String(chunk)); return true }
+  return Promise.resolve(fn()).finally(() => { process.stdout.write = orig; process.stderr.write = origErr })
+    .then((rc) => ({ rc, out: chunks.join(''), err: errChunks.join('') }))
 }
 
 async function makeKeypair(dir, name, extra = []) {
@@ -52,11 +61,36 @@ test('keygen --algorithm ml-kem-1024: writes an ML-KEM-1024 identity', () => wit
   assert.equal(id.secretKey.length, 3168)
 }))
 
-test('keygen: ML-KEM-768 stays the default', () => withDir(async (dir) => {
-  const { path, content } = await makeKeypair(dir, 'k.kxco')
-  assert.ok(content.includes('algorithm: ml-kem-768\n'))
-  assert.equal(readIdentity(path).algorithm, 'ml-kem-768')
-  assert.equal(readIdentity(path).publicKey.length, 1184)
+test('keygen: ML-KEM-1024 is the default, a 1568-byte key that seals ml-kem-1024+aes-256-gcm and round-trips', () => withDir(async (dir) => {
+  const id = await makeKeypair(dir, 'k.kxco')
+  assert.ok(id.content.includes('algorithm: ml-kem-1024\n'))
+  const { algorithm, publicKey, secretKey } = readIdentity(id.path)
+  assert.equal(algorithm, 'ml-kem-1024')
+  assert.equal(publicKey.length, 1568)
+  assert.equal(secretKey.length, 3168)
+  assert.equal(decodePublicKey(id.recipient).length, 1568)
+
+  const sealed = await seal(dir, [id.recipient], 'the default')
+  const { header } = parseEnvelope(readFileSync(sealed))
+  assert.equal(header.algorithm, 'ml-kem-1024+aes-256-gcm')
+  assert.equal(header.recipients[0].encapsulatedKey.length, 1568 * 2)
+  const out = join(dir, 'out.txt')
+  await captureStdout(() => decrypt([sealed, `--identity=${id.path}`, `--out=${out}`]))
+  assert.equal(readFileSync(out, 'utf-8'), 'the default')
+}))
+
+test('keygen --algorithm ml-kem-768: still makes an ML-KEM-768 identity, and it round-trips', () => withDir(async (dir) => {
+  const id = await makeKeypair(dir, 'k.kxco', ['--algorithm=ml-kem-768'])
+  assert.ok(id.content.includes('algorithm: ml-kem-768\n'))
+  assert.equal(readIdentity(id.path).publicKey.length, 1184)
+
+  const sealed = await seal(dir, [id.recipient], 'chosen on purpose')
+  const { header } = parseEnvelope(readFileSync(sealed))
+  assert.equal(header.algorithm, 'ml-kem-768+aes-256-gcm')
+  assert.equal(header.recipients[0].encapsulatedKey.length, 1088 * 2)
+  const out = join(dir, 'out.txt')
+  await captureStdout(() => decrypt([sealed, `--identity=${id.path}`, `--out=${out}`]))
+  assert.equal(readFileSync(out, 'utf-8'), 'chosen on purpose')
 }))
 
 test('keygen: an unknown --algorithm is refused', async () => {
@@ -68,7 +102,7 @@ test('keygen --master --algorithm ml-kem-1024: deterministic, and unrelated to t
   const flags = [`--master=${master}`, '--label=archive']
   const a = await makeKeypair(dir, 'a.kxco', [...flags, '--algorithm=ml-kem-1024'])
   const b = await makeKeypair(dir, 'b.kxco', [...flags, '--algorithm=ml-kem-1024'])
-  const c = await makeKeypair(dir, 'c.kxco', flags)
+  const c = await makeKeypair(dir, 'c.kxco', [...flags, '--algorithm=ml-kem-768'])
   assert.equal(a.recipient, b.recipient)
   assert.notEqual(a.recipient, c.recipient)
 }))
@@ -101,7 +135,7 @@ test('multi-recipient ML-KEM-1024: each recipient opens the same envelope', () =
 }))
 
 test('encrypt: recipients from both parameter sets in one envelope are refused', () => withDir(async (dir) => {
-  const a = await makeKeypair(dir, 'a.kxco')
+  const a = await makeKeypair(dir, 'a.kxco', ['--algorithm=ml-kem-768'])
   const b = await makeKeypair(dir, 'b.kxco', ['--algorithm=ml-kem-1024'])
   writeFileSync(join(dir, 'p.txt'), 'x')
   await assert.rejects(
@@ -111,7 +145,7 @@ test('encrypt: recipients from both parameter sets in one envelope are refused',
 }))
 
 test('decrypt: an identity of one parameter set is refused on an envelope of the other', () => withDir(async (dir) => {
-  const k768 = await makeKeypair(dir, 'k768.kxco')
+  const k768 = await makeKeypair(dir, 'k768.kxco', ['--algorithm=ml-kem-768'])
   const k1024 = await makeKeypair(dir, 'k1024.kxco', ['--algorithm=ml-kem-1024'])
   const sealed1024 = await seal(dir, [k1024.recipient])
   await assert.rejects(
@@ -128,7 +162,7 @@ test('decrypt: an identity of one parameter set is refused on an envelope of the
 }))
 
 test('decrypt: an ML-KEM-768 envelope relabelled as ML-KEM-1024 is refused', () => withDir(async (dir) => {
-  const id = await makeKeypair(dir, 'k.kxco')
+  const id = await makeKeypair(dir, 'k.kxco', ['--algorithm=ml-kem-768'])
   const sealed = await seal(dir, [id.recipient])
   const bytes = readFileSync(sealed)
   const relabelled = Buffer.from(bytes.toString('latin1')
@@ -149,10 +183,10 @@ test('readIdentity: an algorithm line that disagrees with the key is refused', (
 }))
 
 test('readIdentity: a file without an algorithm line is read by its key', () => withDir(async (dir) => {
-  for (const extra of [[], ['--algorithm=ml-kem-1024']]) {
-    const id = await makeKeypair(dir, 'k.kxco', extra)
+  for (const want of ['ml-kem-768', 'ml-kem-1024']) {
+    const id = await makeKeypair(dir, 'k.kxco', [`--algorithm=${want}`])
     writeFileSync(id.path, id.content.replace(/^algorithm: .*\n/m, ''))
-    assert.equal(readIdentity(id.path).algorithm, extra.length ? 'ml-kem-1024' : 'ml-kem-768')
+    assert.equal(readIdentity(id.path).algorithm, want)
   }
 }))
 
@@ -173,11 +207,63 @@ test('header: each algorithm line fixes its own encapsulated key length', () => 
   const r = (bytes) => [{ kid: 'aa'.repeat(8), encapsulatedKey: 'bb'.repeat(bytes), wrappedDek: 'dd'.repeat(48) }]
   const h = parseHeaderText(serializeHeader({ ...base, recipients: r(1568), algorithm: 'ml-kem-1024+aes-256-gcm' }))
   assert.equal(h.algorithm, 'ml-kem-1024+aes-256-gcm')
-  assert.throws(() => parseHeaderText(serializeHeader({ ...base, recipients: r(1088), algorithm: 'ml-kem-1024+aes-256-gcm' })),
-    KxcoVaultError)
-  assert.throws(() => parseHeaderText(serializeHeader({ ...base, recipients: r(1568) })), KxcoVaultError)
+  // A line changed to name the other set after the header was written is
+  // refused by the parser, on the encapsulated key's length.
+  const relabel = (text, from, to) => {
+    const out = text.replace(`algorithm: ${from}`, `algorithm: ${to}`)
+    assert.notEqual(out, text)
+    return out
+  }
+  const h768 = serializeHeader({ ...base, recipients: r(1088) })
+  const h1024 = serializeHeader({ ...base, recipients: r(1568) })
+  assert.throws(() => parseHeaderText(relabel(h768, 'ml-kem-768+', 'ml-kem-1024+')), KxcoVaultError)
+  assert.throws(() => parseHeaderText(relabel(h1024, 'ml-kem-1024+', 'ml-kem-768+')), KxcoVaultError)
   assert.throws(() => serializeHeader({ ...base, recipients: r(1088), algorithm: 'ml-kem-512+aes-256-gcm' }),
     KxcoVaultError)
+})
+
+const HEADER = { nonce: 'cc'.repeat(12), created: '2026-10-10T00:00:00Z' }
+const recipientsOf = (...sizes) => sizes.map((bytes, i) => ({
+  kid: String(i).repeat(16), encapsulatedKey: 'bb'.repeat(bytes), wrappedDek: 'dd'.repeat(48),
+}))
+
+// The header is the AES-GCM additional data, so a wrong algorithm line can
+// never be corrected once a payload is sealed under it. serializeHeader takes
+// the set from the encapsulated keys rather than from a default.
+test('serializeHeader: with no algorithm, the encapsulated keys decide the line', () => {
+  const line = (recipients) => serializeHeader({ ...HEADER, recipients }).split('\n')[1]
+  assert.equal(line(recipientsOf(1088)), 'algorithm: ml-kem-768+aes-256-gcm')
+  assert.equal(line(recipientsOf(1088, 1088)), 'algorithm: ml-kem-768+aes-256-gcm')
+  assert.equal(line(recipientsOf(1568)), 'algorithm: ml-kem-1024+aes-256-gcm')
+  assert.equal(line(recipientsOf(1568, 1568)), 'algorithm: ml-kem-1024+aes-256-gcm')
+  for (const [size, algorithm] of [[1088, 'ml-kem-768+aes-256-gcm'], [1568, 'ml-kem-1024+aes-256-gcm']]) {
+    assert.equal(serializeHeader({ ...HEADER, recipients: recipientsOf(size), algorithm }),
+      serializeHeader({ ...HEADER, recipients: recipientsOf(size) }))
+  }
+})
+
+test('serializeHeader: an algorithm that disagrees with the encapsulated keys is refused', () => {
+  for (const [size, algorithm, keys] of [
+    [1088, 'ml-kem-1024+aes-256-gcm', 'ml-kem-768+aes-256-gcm'],
+    [1568, 'ml-kem-768+aes-256-gcm', 'ml-kem-1024+aes-256-gcm'],
+  ]) {
+    assert.throws(() => serializeHeader({ ...HEADER, recipients: recipientsOf(size), algorithm }),
+      (err) => err instanceof KxcoVaultError && err.message ===
+        `serializeHeader: algorithm ${algorithm} disagrees with the encapsulated keys, which are ${keys}`)
+  }
+})
+
+test('serializeHeader: recipients from both parameter sets are refused, with or without an algorithm', () => {
+  for (const algorithm of [undefined, 'ml-kem-768+aes-256-gcm', 'ml-kem-1024+aes-256-gcm']) {
+    assert.throws(() => serializeHeader({ ...HEADER, recipients: recipientsOf(1088, 1568), algorithm }),
+      (err) => err instanceof KxcoVaultError && /recipients mix ML-KEM-768 and ML-KEM-1024/.test(err.message))
+  }
+})
+
+test('serializeHeader: an encapsulated key of neither length, or no recipient at all, is refused', () => {
+  for (const recipients of [recipientsOf(1087), recipientsOf(1569), recipientsOf(1184), []]) {
+    assert.throws(() => serializeHeader({ ...HEADER, recipients }), KxcoVaultError)
+  }
 })
 
 // Bytes written by kxco-pq-vault 1.1.8, before ML-KEM-1024 was added here.
@@ -193,3 +279,101 @@ test('an envelope sealed by 1.1.8 still opens, byte for byte', () => withDir(asy
   assert.equal(rc, 0)
   assert.equal(readFileSync(out, 'utf-8'), LEGACY.plaintext)
 }))
+
+// Bytes written by the released kxco-pq-vault 1.3.0, the last version whose
+// keygen made ML-KEM-768 keys by default. They have to open exactly as they did.
+test('an identity and envelope made by kxco-pq-vault 1.3.0 open under this version, byte for byte', () => withDir(async (dir) => {
+  assert.equal(V130.madeBy, 'kxco-pq-vault@1.3.0')
+  const identity = join(dir, 'v130.kxco')
+  const sealed = join(dir, 'v130.bin.kxco')
+  const out = join(dir, 'v130.bin')
+  writeFileSync(identity, V130.identity, 'utf-8')
+  writeFileSync(sealed, Buffer.from(V130.envelopeBase64, 'base64'))
+  const id = readIdentity(identity)
+  assert.equal(id.algorithm, 'ml-kem-768')
+  assert.equal(id.publicKey.length, 1184)
+  const { header } = parseEnvelope(readFileSync(sealed))
+  assert.equal(header.algorithm, 'ml-kem-768+aes-256-gcm')
+  assert.equal(header.recipients[0].encapsulatedKey.length, 1088 * 2)
+  const { rc } = await captureStdout(() => decrypt([sealed, `--identity=${identity}`, `--out=${out}`]))
+  assert.equal(rc, 0)
+  assert.deepEqual(readFileSync(out), Buffer.from(V130.plaintextBase64, 'base64'))
+}))
+
+test('the 1.3.0 envelope relabelled as ML-KEM-1024 is refused', () => withDir(async (dir) => {
+  const identity = join(dir, 'v130.kxco')
+  const sealed = join(dir, 'v130.bin.kxco')
+  writeFileSync(identity, V130.identity, 'utf-8')
+  const bytes = Buffer.from(V130.envelopeBase64, 'base64')
+  const relabelled = Buffer.from(bytes.toString('latin1')
+    .replace('algorithm: ml-kem-768+aes-256-gcm', 'algorithm: ml-kem-1024+aes-256-gcm'), 'latin1')
+  assert.notDeepEqual(relabelled, bytes)
+  writeFileSync(sealed, relabelled)
+  await assert.rejects(
+    () => decrypt([sealed, `--identity=${identity}`, `--out=${join(dir, 'o')}`]),
+    (err) => err instanceof KxcoVaultError && /encapsulated_key must be 3136 hex characters/.test(err.message),
+  )
+}))
+
+test('keygen --master with --algorithm ml-kem-768 re-derives the key 1.3.0 derived; without it, ML-KEM-1024', () => withDir(async (dir) => {
+  const { master, label, identity } = V130.derived
+  const flags = [`--master=${master}`, `--label=${label}`]
+  const again = await makeKeypair(dir, 'a.kxco', [...flags, '--algorithm=ml-kem-768'])
+  assert.equal(again.recipient, identity.match(/^public: (kxco1\S+)/m)[1])
+  assert.equal(again.content.match(/^secret: .*$/m)[0], identity.match(/^secret: .*$/m)[0])
+  const fresh = await makeKeypair(dir, 'b.kxco', flags)
+  assert.equal(readIdentity(fresh.path).algorithm, 'ml-kem-1024')
+}))
+
+// The other direction: an envelope this version seals to an ML-KEM-768 key
+// opens under the released 1.3.0, so a recipient who has not upgraded can
+// still read it.
+test('an envelope this version seals to the 1.3.0 identity opens under kxco-pq-vault 1.3.0', () => withDir(async (dir) => {
+  const bin = fileURLToPath(new URL('../node_modules/kxco-pq-vault-130/bin/kxco-vault.js', import.meta.url))
+  assert.equal(execFileSync(process.execPath, [bin, '--version'], { encoding: 'utf-8' }), 'kxco-pq-vault 1.3.0\n')
+  const identity = join(dir, 'v130.kxco')
+  writeFileSync(identity, V130.identity, 'utf-8')
+  const sealed = await seal(dir, [`@${identity}`], 'from 2.0.0 to 1.3.0')
+  assert.equal(parseEnvelope(readFileSync(sealed)).header.algorithm, 'ml-kem-768+aes-256-gcm')
+  const out = join(dir, 'out.txt')
+  execFileSync(process.execPath, [bin, 'decrypt', sealed, '--identity', identity, '--out', out])
+  assert.equal(readFileSync(out, 'utf-8'), 'from 2.0.0 to 1.3.0')
+}))
+
+// The latest release of each earlier 1.x line, each fixture made by that
+// release's own CLI with test/fixtures/make-vault-fixtures.mjs. With the 1.3.0
+// fixture above, every 1.x line is covered.
+const KEM_SIZES = { 'ml-kem-768': { publicKey: 1184, encapsulatedKey: 1088 }, 'ml-kem-1024': { publicKey: 1568, encapsulatedKey: 1568 } }
+for (const [version, kem] of [
+  ['1.0.8', 'ml-kem-768'],
+  ['1.1.8', 'ml-kem-768'],
+  ['1.2.0', 'ml-kem-768'],
+  ['1.2.0', 'ml-kem-1024'],
+]) {
+  const fixture = JSON.parse(readFileSync(new URL(`./fixtures/vault-${version}-${kem}.json`, import.meta.url), 'utf-8'))
+
+  test(`kxco-pq-vault ${version}: its ${kem} identity and envelope open under this version, byte for byte`, () => withDir(async (dir) => {
+    assert.equal(fixture.madeBy, `kxco-pq-vault@${version}`)
+    const identity = join(dir, 'id.kxco')
+    const sealed = join(dir, 'plain.bin.kxco')
+    const out = join(dir, 'plain.bin')
+    writeFileSync(identity, fixture.identity, 'utf-8')
+    writeFileSync(sealed, Buffer.from(fixture.envelopeBase64, 'base64'))
+    const id = readIdentity(identity)
+    assert.equal(id.algorithm, kem)
+    assert.equal(id.publicKey.length, KEM_SIZES[kem].publicKey)
+    const { header } = parseEnvelope(readFileSync(sealed))
+    assert.equal(header.algorithm, `${kem}+aes-256-gcm`)
+    assert.equal(header.recipients[0].encapsulatedKey.length, KEM_SIZES[kem].encapsulatedKey * 2)
+    const { rc } = await captureStdout(() => decrypt([sealed, `--identity=${identity}`, `--out=${out}`]))
+    assert.equal(rc, 0)
+    assert.deepEqual(readFileSync(out), Buffer.from(fixture.plaintextBase64, 'base64'))
+  }))
+
+  test(`kxco-pq-vault ${version}: keygen --master --algorithm ${kem} derives the key ${version} derived`, () => withDir(async (dir) => {
+    const { master, label, identity } = fixture.derived
+    const again = await makeKeypair(dir, 'derived.kxco', [`--master=${master}`, `--label=${label}`, `--algorithm=${kem}`])
+    assert.equal(again.recipient, identity.match(/^public: (kxco1\S+)$/m)[1])
+    assert.equal(again.content.match(/^secret: .*$/m)[0], identity.match(/^secret: .*$/m)[0])
+  }))
+}

@@ -1,6 +1,6 @@
 # kxco-pq-vault
 
-**Post-quantum file encryption, like PGP: ML-KEM-768 envelopes that one recipient or many can open, each with their own key.**
+**Post-quantum file encryption, like PGP: ML-KEM-1024 envelopes that one recipient or many can open, each with their own key.**
 
 [![npm](https://img.shields.io/npm/v/kxco-pq-vault?label=npm&color=b0964f)](https://www.npmjs.com/package/kxco-pq-vault)
 [![downloads](https://img.shields.io/npm/dm/kxco-pq-vault?label=downloads&color=b0964f)](https://www.npmjs.com/package/kxco-pq-vault)
@@ -10,9 +10,9 @@
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 [![node](https://img.shields.io/node/v/kxco-pq-vault.svg)](https://nodejs.org)
 
-Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-768 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key.
+Post-quantum file and envelope encryption. Encrypts data to one or more ML-KEM-1024 public keys, like PGP, with post-quantum key encapsulation. The encrypted envelope can only be decrypted by the holder of the matching private key. New keys made with kxco-pq-vault use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting.
 
-- **Built for harvest-now, decrypt-later.** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) names adversaries "collecting United States information now, and decrypting it later once large-scale quantum computers are operational". A vault envelope is pure ML-KEM-768 with no classical step, so a copy taken today holds no classical key exchange to break later.
+- **Built for harvest-now, decrypt-later.** [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) names adversaries "collecting United States information now, and decrypting it later once large-scale quantum computers are operational". A vault envelope is pure ML-KEM, ML-KEM-1024 by default, with no classical step, so a copy taken today holds no classical key exchange to break later.
 - **The requirement it answers.** [OMB M-26-15](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf) tells agencies to prioritise "re-encrypting long-lived sensitive data using keys protected by PQC mechanisms". Archives, backups and ledgers are re-encrypted from the terminal in five lines, shown under [Re-encrypting an archive](#re-encrypting-an-archive).
 - **One envelope, many recipients.** A random 32-byte data key per envelope is wrapped to each recipient's ML-KEM shared secret, so each recipient opens the same plaintext with their own key and nobody shares a secret.
 - **Tampering fails before disclosure.** The whole header is the AES-256-GCM additional authenticated data, so a changed nonce, algorithm line or recipient entry fails decryption before any plaintext is released.
@@ -73,7 +73,7 @@ kxco-vault decrypt report.pdf.kxco --identity alice.kxco --out report.pdf
 
 ### Re-encrypting an archive
 
-The long-lived data OMB M-26-15 names, moved under ML-KEM-768 in five commands:
+The long-lived data OMB M-26-15 names, moved under ML-KEM-1024 in five commands:
 
 ```bash
 npx kxco-vault keygen --out archive.kxco
@@ -85,7 +85,7 @@ npx kxco-vault decrypt ledger-2019.csv.kxco --identity archive.kxco --out restor
 
 ```text
 version:    KXCO-VAULT/1.0
-algorithm:  ml-kem-768+aes-256-gcm
+algorithm:  ml-kem-1024+aes-256-gcm
 recipients: 1
 ```
 
@@ -95,7 +95,7 @@ recipients: 1
 
 ```js
 import { readFileSync, writeFileSync } from 'node:fs'
-import { mlKem } from 'kxco-post-quantum'
+import { mlKem, mlKem1024 } from 'kxco-post-quantum'
 import {
   encodePublicKey, decodePublicKey,
   generateDek, generateNonce, computeKid,
@@ -108,16 +108,18 @@ import {
 
 // --- ENCRYPT ---
 
-// Recipient's public key (1184 bytes, ML-KEM-768): from their identity file,
-// or decodePublicKey('kxco1...') for a recipient string they shared
+// Recipient's public key: from their identity file, or
+// decodePublicKey('kxco1...') for a recipient string they shared. Its length
+// gives its set: 1568 bytes is ML-KEM-1024, what keygen makes; 1184 is ML-KEM-768.
 const recipientPubkey = resolveRecipient('@alice.kxco')
+const kem = recipientPubkey.length === 1568 ? mlKem1024 : mlKem
 
 const dek     = generateDek()    // 32-byte random data encryption key
 const nonce   = generateNonce()  // 12-byte random GCM nonce
 const created = new Date().toISOString().replace(/\.\d+Z$/, 'Z')
 
 // Encapsulate: produces an ML-KEM ciphertext and a shared secret
-const { ciphertext: mlKemCt, sharedSecret: ss } = mlKem.encapsulate(recipientPubkey)
+const { ciphertext: mlKemCt, sharedSecret: ss } = kem.encapsulate(recipientPubkey)
 const kid        = computeKid(recipientPubkey)
 const wrappedDek = wrapDek(Buffer.from(ss), kid, dek)
 
@@ -127,6 +129,7 @@ const recipients = [{
   wrappedDek:      wrappedDek.toString('hex'),
 }]
 
+// The encapsulated key's length tells serializeHeader which algorithm line to write
 const headerText      = serializeHeader({ recipients, nonce: nonce.toString('hex'), created })
 const canonicalHeader = Buffer.from(headerText, 'utf-8')
 const separator       = Buffer.from('--- BEGIN CIPHERTEXT ---\n', 'utf-8')
@@ -137,7 +140,8 @@ writeFileSync('report.pdf.kxco', Buffer.concat([canonicalHeader, separator, payl
 
 // --- DECRYPT ---
 
-const { publicKey, secretKey } = readIdentity('alice.kxco')
+const { publicKey, secretKey, algorithm } = readIdentity('alice.kxco')
+const myKem = algorithm === 'ml-kem-1024' ? mlKem1024 : mlKem
 const myKid = computeKid(publicKey)
 
 const buf = readFileSync('report.pdf.kxco')
@@ -146,7 +150,7 @@ const { header, canonicalHeader: aad, ciphertext } = parseEnvelope(buf)
 const block = header.recipients.find(r => r.kid === myKid)
 if (!block) throw new KxcoVaultError('not a recipient in this envelope')
 
-const ss2       = Buffer.from(mlKem.decapsulate(Buffer.from(block.encapsulatedKey, 'hex'), secretKey))
+const ss2       = Buffer.from(myKem.decapsulate(Buffer.from(block.encapsulatedKey, 'hex'), secretKey))
 const dek2      = unwrapDek(ss2, myKid, Buffer.from(block.wrappedDek, 'hex'))
 const decrypted = decryptPayload(dek2, Buffer.from(header.nonce, 'hex'), aad, ciphertext)
 
@@ -181,11 +185,11 @@ All exports are named. Import what you need from `kxco-pq-vault`.
 
 #### `encodePublicKey(pubkeyBytes: Buffer): string`
 
-Encodes a 1184-byte ML-KEM-768 or 1568-byte ML-KEM-1024 public key as a `kxco1...` bech32m string suitable for sharing as a recipient identifier. The two sets share the prefix; the decoded length says which one a key is.
+Encodes a 1568-byte ML-KEM-1024 or 1184-byte ML-KEM-768 public key as a `kxco1...` bech32m string suitable for sharing as a recipient identifier. The two sets share the prefix; the decoded length says which one a key is.
 
 #### `decodePublicKey(str: string): Buffer`
 
-Decodes a `kxco1...` bech32m string back to raw public key bytes. Throws `KxcoVaultError` if the string is malformed or decodes to neither 1184 (ML-KEM-768) nor 1568 (ML-KEM-1024) bytes.
+Decodes a `kxco1...` bech32m string back to raw public key bytes. Throws `KxcoVaultError` if the string is malformed or decodes to neither 1568 (ML-KEM-1024) nor 1184 (ML-KEM-768) bytes.
 
 ### Crypto primitives
 
@@ -221,7 +225,7 @@ Decrypts a payload produced by `encryptPayload`. Throws `KxcoVaultError` if auth
 
 #### `serializeHeader({ recipients, nonce, created, algorithm? }): string`
 
-Produces the canonical plain-text header for an envelope. `recipients` is an array of `{ kid, encapsulatedKey, wrappedDek }` (all hex strings). `nonce` and `created` are hex and ISO 8601 strings respectively. `algorithm` is `'ml-kem-768+aes-256-gcm'` (the default) or `'ml-kem-1024+aes-256-gcm'`. It must match the parameter set of every recipient's key, and any other value throws `KxcoVaultError`.
+Produces the canonical plain-text header for an envelope. `recipients` is an array of `{ kid, encapsulatedKey, wrappedDek }` (all hex strings). `nonce` and `created` are hex and ISO 8601 strings respectively. `algorithm` is optional: the length of the encapsulated keys decides it, 1568 bytes giving `'ml-kem-1024+aes-256-gcm'` and 1088 giving `'ml-kem-768+aes-256-gcm'`. The header is the AES-GCM additional data, so an algorithm line that named the wrong set could never be corrected once a payload was sealed under it. A passed `algorithm` that disagrees with the keys, recipients that mix the two sets, and an encapsulated key of any other length all throw `KxcoVaultError`.
 
 #### `parseEnvelope(buf: Buffer): { header, canonicalHeader, ciphertext }`
 
@@ -229,11 +233,11 @@ Splits an envelope buffer, the bytes of a `.kxco` file, into its parsed header o
 
 #### `parseHeaderText(text: string): object`
 
-Parses just the text portion of a header (without the binary ciphertext). Useful for inspection without decryption. Each `encapsulated_key` is checked against the length its algorithm line fixes: 1088 bytes for ML-KEM-768, 1568 for ML-KEM-1024.
+Parses just the text portion of a header (without the binary ciphertext). Useful for inspection without decryption. Each `encapsulated_key` is checked against the length its algorithm line fixes: 1568 bytes for ML-KEM-1024, 1088 for ML-KEM-768.
 
 ### Identity and recipient helpers
 
-#### `readIdentity(path: string): { publicKey: Buffer, secretKey: Buffer, algorithm: 'ml-kem-768' | 'ml-kem-1024' }`
+#### `readIdentity(path: string): { publicKey: Buffer, secretKey: Buffer, algorithm: 'ml-kem-1024' | 'ml-kem-768' }`
 
 Reads an identity file such as `keypair.kxco` and returns the parsed public and secret key buffers and the parameter set, which the public key's length decides. Throws `KxcoVaultError` if the file is missing, malformed, contains a key of the wrong length, or names the other set on its `algorithm:` line. A file with no `algorithm:` line is read by its key alone.
 
@@ -256,10 +260,10 @@ All errors thrown by this library use `KxcoVaultError` (extends `Error`, `name =
 ```sh
 kxco-vault keygen --out <keypair.kxco>
 kxco-vault keygen --out <keypair.kxco> --master <hex> --label <string>
-kxco-vault keygen --out <keypair.kxco> --algorithm ml-kem-1024
+kxco-vault keygen --out <keypair.kxco> --algorithm ml-kem-768
 ```
 
-Generates an ML-KEM-768 keypair, or an ML-KEM-1024 one with `--algorithm ml-kem-1024`, and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs always produce the same keypair.
+Generates an ML-KEM-1024 keypair, or an ML-KEM-768 one with `--algorithm ml-kem-768`, and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs and the same `--algorithm` always produce the same keypair. To re-derive a key made before 2.0.0, pass `--algorithm ml-kem-768`: without it, `--master` now derives an ML-KEM-1024 key, and keygen says so in one line on stderr.
 
 ### `recipient`
 
@@ -275,7 +279,7 @@ Prints the `kxco1...` recipient string from an identity file.
 kxco-vault encrypt <file> --recipient <kxco1...|@keyfile> [--recipient ...] [--out <file.kxco>]
 ```
 
-Encrypts a file for one or more recipients. Multiple `--recipient` flags produce a multi-recipient envelope; each recipient can independently decrypt the same plaintext. The recipients' keys decide the algorithm line: ML-KEM-768 keys give `ml-kem-768+aes-256-gcm`, ML-KEM-1024 keys give `ml-kem-1024+aes-256-gcm`. An envelope names one parameter set, so recipients from both sets are refused; encrypt once for each.
+Encrypts a file for one or more recipients. Multiple `--recipient` flags produce a multi-recipient envelope; each recipient can independently decrypt the same plaintext. The recipients' keys decide the algorithm line: ML-KEM-1024 keys give `ml-kem-1024+aes-256-gcm`, ML-KEM-768 keys give `ml-kem-768+aes-256-gcm`. An envelope names one parameter set, so recipients from both sets are refused; encrypt once for each.
 
 ### `decrypt`
 
@@ -299,10 +303,10 @@ Prints the envelope header without decrypting: algorithm, recipient count, key I
 
 ```
 KXCO-VAULT/1.0
-algorithm: ml-kem-768+aes-256-gcm
+algorithm: ml-kem-1024+aes-256-gcm
 recipients: 1
 recipient[0].kid: <16 hex chars>
-recipient[0].encapsulated_key: <hex: 1088-byte ML-KEM-768 ciphertext, or 1568 bytes under ml-kem-1024+aes-256-gcm>
+recipient[0].encapsulated_key: <hex: 1568-byte ML-KEM-1024 ciphertext, or 1088 bytes under ml-kem-768+aes-256-gcm>
 recipient[0].wrapped_dek: <hex: 48 bytes>
 nonce: <hex: 12 bytes>
 created: 2026-05-28T00:00:00Z
@@ -314,8 +318,8 @@ The entire header is used as GCM additional authenticated data. Modifying any fi
 
 ## Crypto design
 
-- **ML-KEM-768** (NIST FIPS 203): Security Category 3, equivalent to AES-192. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
-- **ML-KEM-1024** (NIST FIPS 203), optional: Security Category 5. Chosen by the recipient's key (`keygen --algorithm ml-kem-1024`), named on the envelope's algorithm line as `ml-kem-1024+aes-256-gcm`, and otherwise the same construction. ML-KEM-768 stays the default, and an envelope written before ML-KEM-1024 was added opens exactly as before.
+- **ML-KEM-1024** (NIST FIPS 203), the default. New keys made with kxco-pq-vault use ML-KEM-1024 (FIPS 203, Category 5); ML-KEM-768 keys made earlier keep decrypting. Pure post-quantum, with no classical fallback by design, so an envelope is never downgraded to something a quantum adversary can open.
+- **ML-KEM-768** (NIST FIPS 203): Security Category 3, equivalent to AES-192. Chosen by the recipient's key (`keygen --algorithm ml-kem-768`, or any key made by 1.3.0 or earlier without `--algorithm`), named on the envelope's algorithm line as `ml-kem-768+aes-256-gcm`, and otherwise the same construction. Identities and envelopes written by earlier versions open exactly as before.
 - **AES-256-GCM**: AEAD symmetric encryption of the payload.
 - **DEK wrapping**: a random 32-byte data encryption key is generated per envelope. Each recipient's ML-KEM shared secret wraps the DEK independently. All recipients decrypt the same plaintext.
 - **Header integrity**: the full canonical header is bound as GCM additional authenticated data, linking header and ciphertext together.
@@ -361,7 +365,7 @@ above it.
 
 ## Security
 
-**ML-KEM-768** (NIST FIPS 203) via [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), running on the OpenSSL 3.5 primitives where the runtime provides them, with AES-256-GCM from Node's own `crypto`. No custom primitives.
+**ML-KEM-1024** by default, and **ML-KEM-768** for keys made with it (both NIST FIPS 203), via [`kxco-post-quantum`](https://www.npmjs.com/package/kxco-post-quantum), running on the OpenSSL 3.5 primitives where the runtime provides them, with AES-256-GCM from Node's own `crypto`. No custom primitives.
 
 Evidenced, and reproducible on your own machine:
 

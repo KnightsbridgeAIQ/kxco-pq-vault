@@ -2,21 +2,24 @@
 
 // ── Key encoding ──────────────────────────────────────────────────────────────
 
-/** The ML-KEM parameter sets a vault key can be. ML-KEM-768 is the default. */
-export type VaultKem = 'ml-kem-768' | 'ml-kem-1024'
+/**
+ * The ML-KEM parameter sets a vault key can be. New keys default to ML-KEM-1024;
+ * ML-KEM-768 keys made earlier keep decrypting.
+ */
+export type VaultKem = 'ml-kem-1024' | 'ml-kem-768'
 
 /** The algorithm line an envelope can carry, one per parameter set. */
-export type VaultAlgorithm = 'ml-kem-768+aes-256-gcm' | 'ml-kem-1024+aes-256-gcm'
+export type VaultAlgorithm = 'ml-kem-1024+aes-256-gcm' | 'ml-kem-768+aes-256-gcm'
 
 /**
- * Encode an ML-KEM-768 (1184-byte) or ML-KEM-1024 (1568-byte) public key as a
+ * Encode an ML-KEM-1024 (1568-byte) or ML-KEM-768 (1184-byte) public key as a
  * `kxco1…` bech32m recipient string.
  */
 export function encodePublicKey(pubkeyBytes: Uint8Array | Buffer): string
 
 /**
- * Decode a `kxco1…` bech32m string back to raw public key bytes: 1184 for
- * ML-KEM-768, 1568 for ML-KEM-1024. Any other length throws.
+ * Decode a `kxco1…` bech32m string back to raw public key bytes: 1568 for
+ * ML-KEM-1024, 1184 for ML-KEM-768. Any other length throws.
  */
 export function decodePublicKey(str: string): Uint8Array
 
@@ -25,7 +28,7 @@ export function decodePublicKey(str: string): Uint8Array
 export interface RecipientEntry {
   /** 16 hex chars — first 8 bytes of SHA-256(pubkey) */
   kid:             string
-  /** hex: the ML-KEM ciphertext, 1088 bytes for ML-KEM-768 or 1568 for ML-KEM-1024 */
+  /** hex: the ML-KEM ciphertext, 1568 bytes for ML-KEM-1024 or 1088 for ML-KEM-768 */
   encapsulatedKey: string
   /** hex — AES-256-GCM(ss, nonce=0, ad=kid).encrypt(dek) */
   wrappedDek:      string
@@ -37,8 +40,9 @@ export interface EnvelopeHeader {
   nonce:   string
   created: string  // ISO 8601
   /**
-   * The envelope's algorithm line. Optional when serialising, where it defaults
-   * to 'ml-kem-768+aes-256-gcm'; always present on a parsed header.
+   * The envelope's algorithm line. Optional when serialising, where the
+   * encapsulated keys decide it: 1568 bytes gives 'ml-kem-1024+aes-256-gcm' and
+   * 1088 gives 'ml-kem-768+aes-256-gcm'. Always present on a parsed header.
    */
   algorithm?: VaultAlgorithm
 }
@@ -48,7 +52,12 @@ export interface ParsedEnvelope {
   ciphertext: Buffer
 }
 
-/** Serialise an envelope header to the canonical KXCO-VAULT text format. */
+/**
+ * Serialise an envelope header to the canonical KXCO-VAULT text format. Throws
+ * KxcoVaultError if a passed `algorithm` disagrees with the encapsulated keys,
+ * if the recipients mix ML-KEM-1024 and ML-KEM-768 keys, or if an encapsulated
+ * key is neither 1568 nor 1088 bytes.
+ */
 export function serializeHeader(header: EnvelopeHeader): string
 
 /** Parse a complete `.kxco` file buffer into header + binary ciphertext. */

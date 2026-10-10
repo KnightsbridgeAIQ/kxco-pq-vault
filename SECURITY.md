@@ -20,7 +20,7 @@ extortion, data sale, or public disclosure ahead of the window below.
 
 ## Scope
 In scope:
-- Cryptographic correctness of the envelope construction (ML-KEM-768 key
+- Cryptographic correctness of the envelope construction (ML-KEM-1024 and ML-KEM-768 key
   encapsulation, AES-GCM content encryption, and how the two are bound)
 - Multi-recipient handling: whether one recipient can recover another
   recipient's key material, or alter the recipient set undetected
@@ -30,7 +30,7 @@ In scope:
 - Key material handling in the CLI: argument, environment and file paths
 
 Out of scope (report upstream to <https://github.com/paulmillr/noble-post-quantum>):
-- Bugs in the underlying ML-KEM-768 primitive
+- Bugs in the underlying ML-KEM-1024 and ML-KEM-768 primitives
 
 Out of scope (report upstream to <https://github.com/paulmillr/scure-base>):
 - Bugs in the underlying Bech32m implementation
@@ -56,9 +56,10 @@ plaintext before encryption.
 
 | Version | Supported |
 |---|---|
-| 1.1.x | yes |
-| 1.0.x | security fixes only |
-| < 1.0 | no |
+| 2.0.x | yes |
+| < 2.0 | no |
+
+Every envelope and identity made by a 1.x release decrypts with 2.0.x, so moving to 2.0.x loses nothing.
 
 ## Disclosure window
 We ask for **90 days** before public disclosure, or until a fix ships if
