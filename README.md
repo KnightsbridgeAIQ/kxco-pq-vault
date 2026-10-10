@@ -263,7 +263,7 @@ kxco-vault keygen --out <keypair.kxco> --master <hex> --label <string>
 kxco-vault keygen --out <keypair.kxco> --algorithm ml-kem-768
 ```
 
-Generates an ML-KEM-1024 keypair, or an ML-KEM-768 one with `--algorithm ml-kem-768`, and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs and the same `--algorithm` always produce the same keypair. A key that version 1.3.0 or earlier derived without `--algorithm` is ML-KEM-768, so pass `--algorithm ml-kem-768` to derive it again.
+Generates an ML-KEM-1024 keypair, or an ML-KEM-768 one with `--algorithm ml-kem-768`, and writes it to an identity file. With `--master` and `--label`, derivation is deterministic: the same inputs and the same `--algorithm` always produce the same keypair. To re-derive a key made before 2.0.0, pass `--algorithm ml-kem-768`: without it, `--master` now derives an ML-KEM-1024 key, and keygen says so in one line on stderr.
 
 ### `recipient`
 

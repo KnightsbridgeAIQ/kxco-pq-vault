@@ -18,12 +18,16 @@ const LEGACY = JSON.parse(readFileSync(new URL('./fixtures/legacy-768.json', imp
 // Made by the released kxco-pq-vault 1.3.0 from npm, with test/fixtures/make-vault-1.3.0.mjs.
 const V130 = JSON.parse(readFileSync(new URL('./fixtures/vault-1.3.0-ml-kem-768.json', import.meta.url), 'utf-8'))
 
+// stderr is collected too, so keygen's --master notice stays out of the test log.
 function captureStdout(fn) {
   const chunks = []
+  const errChunks = []
   const orig = process.stdout.write.bind(process.stdout)
+  const origErr = process.stderr.write.bind(process.stderr)
   process.stdout.write = (chunk) => { chunks.push(String(chunk)); return true }
-  return Promise.resolve(fn()).finally(() => { process.stdout.write = orig })
-    .then((rc) => ({ rc, out: chunks.join('') }))
+  process.stderr.write = (chunk) => { errChunks.push(String(chunk)); return true }
+  return Promise.resolve(fn()).finally(() => { process.stdout.write = orig; process.stderr.write = origErr })
+    .then((rc) => ({ rc, out: chunks.join(''), err: errChunks.join('') }))
 }
 
 async function makeKeypair(dir, name, extra = []) {
@@ -328,9 +332,9 @@ test('an envelope this version seals to the 1.3.0 identity opens under kxco-pq-v
   assert.equal(execFileSync(process.execPath, [bin, '--version'], { encoding: 'utf-8' }), 'kxco-pq-vault 1.3.0\n')
   const identity = join(dir, 'v130.kxco')
   writeFileSync(identity, V130.identity, 'utf-8')
-  const sealed = await seal(dir, [`@${identity}`], 'from 1.4.0 to 1.3.0')
+  const sealed = await seal(dir, [`@${identity}`], 'from 2.0.0 to 1.3.0')
   assert.equal(parseEnvelope(readFileSync(sealed)).header.algorithm, 'ml-kem-768+aes-256-gcm')
   const out = join(dir, 'out.txt')
   execFileSync(process.execPath, [bin, 'decrypt', sealed, '--identity', identity, '--out', out])
-  assert.equal(readFileSync(out, 'utf-8'), 'from 1.4.0 to 1.3.0')
+  assert.equal(readFileSync(out, 'utf-8'), 'from 2.0.0 to 1.3.0')
 }))

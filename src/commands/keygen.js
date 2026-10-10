@@ -13,6 +13,13 @@ const RANDOM_INFO = {
   'ml-kem-1024': 'kxco-vault/keygen/ml-kem-1024/v1',
 }
 
+// Before 2.0.0, --master without --algorithm derived an ML-KEM-768 key; from
+// 2.0.0 the same inputs derive an ML-KEM-1024 one. The notice goes to stderr,
+// so stdout, which scripts read, is the same with or without it.
+const MASTER_DEFAULT_NOTICE =
+  'kxco-vault: --master without --algorithm derives an ML-KEM-1024 key from 2.0.0; ' +
+  'pass --algorithm ml-kem-768 to re-derive a key made earlier\n'
+
 function parseFlags(args) {
   const flags = {}
   let i = 0
@@ -63,6 +70,7 @@ export async function keygen(args) {
     if (!/^[0-9a-fA-F]+$/.test(flags.master) || flags.master.length < 32) {
       throw new KxcoVaultError('keygen: --master must be at least 16 hex bytes')
     }
+    if (flags.algorithm === undefined) process.stderr.write(MASTER_DEFAULT_NOTICE)
     const masterBytes = Buffer.from(flags.master, 'hex')
     const result = kem.keypairFromMaster(masterBytes, flags.label)
     publicKey = result.publicKey

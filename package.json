@@ -1,6 +1,6 @@
 {
   "name": "kxco-pq-vault",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Post-quantum file and envelope encryption, like PGP: ML-KEM-1024 (NIST FIPS 203) to one recipient or many, each opening it with their own key, with no classical step for a harvest-now-decrypt-later adversary to break. AES-256-GCM payloads, bech32m recipient strings, a CLI and a library.",
   "keywords": [
     "post-quantum",

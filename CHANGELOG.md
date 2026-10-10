@@ -1,6 +1,16 @@
 # Changelog
 
-## 1.4.0 (2026-10-10)
+## 2.0.0 (2026-10-10)
+
+**Breaking changes**
+
+- New keys default to ML-KEM-1024 (keygen output grows from 1184 to 1568 bytes).
+- `keygen --master --label` without `--algorithm` now derives an ML-KEM-1024 key; pass `--algorithm ml-kem-768` to re-derive a key made before 2.0.0.
+- `serializeHeader` throws on disagreeing or mixed inputs that 1.3.0 accepted and turned into unreadable headers.
+
+**What does not change**
+
+- Every 1.x envelope and identity decrypts.
 
 **New keys are ML-KEM-1024.** `kxco-vault keygen` with no `--algorithm` now
 makes an ML-KEM-1024 identity (FIPS 203, Category 5), and an envelope sealed to
@@ -17,10 +27,12 @@ identity opens under 1.3.0.
 
 **Deterministic keys: pass `--algorithm ml-kem-768` to derive an old one
 again.** `keygen --master <hex> --label <string>` without `--algorithm` now
-derives the ML-KEM-1024 key for that master and label. A key that 1.3.0 or
-earlier derived that way is ML-KEM-768, and the same command with
-`--algorithm ml-kem-768` derives it unchanged; a test checks this against a key
-1.3.0 derived.
+derives the ML-KEM-1024 key for that master and label. A key derived that way
+before 2.0.0 is ML-KEM-768, and the same command with `--algorithm ml-kem-768`
+derives it unchanged; a test checks this against a key 1.3.0 derived. When
+`--master` is given without `--algorithm`, keygen prints one line to stderr
+saying so. Nothing is added to stdout, so a script that reads keygen's output
+gets the same bytes.
 
 **`serializeHeader` takes the set from the encapsulated keys.** With no
 `algorithm`, it writes the line their length gives: 1088 bytes for ML-KEM-768,
@@ -32,7 +44,8 @@ an encapsulated key of any other length now throw `KxcoVaultError`, where 1.3.0
 wrote a header that could not be opened. The CLI already passed the right
 `algorithm`, so CLI users were never exposed to this.
 
-The README and typings lead with ML-KEM-1024.
+The README and typings lead with ML-KEM-1024, and SECURITY.md and ASSESSMENT.md
+name both sets.
 
 ## 1.3.0 (2026-10-09)
 
