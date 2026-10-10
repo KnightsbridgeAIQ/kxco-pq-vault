@@ -15,7 +15,8 @@ import { readIdentity } from '../src/util.js'
 import { KxcoVaultError } from '../src/errors.js'
 
 const LEGACY = JSON.parse(readFileSync(new URL('./fixtures/legacy-768.json', import.meta.url), 'utf-8'))
-// Made by the released kxco-pq-vault 1.3.0 from npm, with test/fixtures/make-vault-1.3.0.mjs.
+// Made by the released kxco-pq-vault 1.3.0 from npm, at commit e6a2629, by the
+// single-release form of test/fixtures/make-vault-fixtures.mjs.
 const V130 = JSON.parse(readFileSync(new URL('./fixtures/vault-1.3.0-ml-kem-768.json', import.meta.url), 'utf-8'))
 
 // stderr is collected too, so keygen's --master notice stays out of the test log.
@@ -338,3 +339,41 @@ test('an envelope this version seals to the 1.3.0 identity opens under kxco-pq-v
   execFileSync(process.execPath, [bin, 'decrypt', sealed, '--identity', identity, '--out', out])
   assert.equal(readFileSync(out, 'utf-8'), 'from 2.0.0 to 1.3.0')
 }))
+
+// The latest release of each earlier 1.x line, each fixture made by that
+// release's own CLI with test/fixtures/make-vault-fixtures.mjs. With the 1.3.0
+// fixture above, every 1.x line is covered.
+const KEM_SIZES = { 'ml-kem-768': { publicKey: 1184, encapsulatedKey: 1088 }, 'ml-kem-1024': { publicKey: 1568, encapsulatedKey: 1568 } }
+for (const [version, kem] of [
+  ['1.0.8', 'ml-kem-768'],
+  ['1.1.8', 'ml-kem-768'],
+  ['1.2.0', 'ml-kem-768'],
+  ['1.2.0', 'ml-kem-1024'],
+]) {
+  const fixture = JSON.parse(readFileSync(new URL(`./fixtures/vault-${version}-${kem}.json`, import.meta.url), 'utf-8'))
+
+  test(`kxco-pq-vault ${version}: its ${kem} identity and envelope open under this version, byte for byte`, () => withDir(async (dir) => {
+    assert.equal(fixture.madeBy, `kxco-pq-vault@${version}`)
+    const identity = join(dir, 'id.kxco')
+    const sealed = join(dir, 'plain.bin.kxco')
+    const out = join(dir, 'plain.bin')
+    writeFileSync(identity, fixture.identity, 'utf-8')
+    writeFileSync(sealed, Buffer.from(fixture.envelopeBase64, 'base64'))
+    const id = readIdentity(identity)
+    assert.equal(id.algorithm, kem)
+    assert.equal(id.publicKey.length, KEM_SIZES[kem].publicKey)
+    const { header } = parseEnvelope(readFileSync(sealed))
+    assert.equal(header.algorithm, `${kem}+aes-256-gcm`)
+    assert.equal(header.recipients[0].encapsulatedKey.length, KEM_SIZES[kem].encapsulatedKey * 2)
+    const { rc } = await captureStdout(() => decrypt([sealed, `--identity=${identity}`, `--out=${out}`]))
+    assert.equal(rc, 0)
+    assert.deepEqual(readFileSync(out), Buffer.from(fixture.plaintextBase64, 'base64'))
+  }))
+
+  test(`kxco-pq-vault ${version}: keygen --master --algorithm ${kem} derives the key ${version} derived`, () => withDir(async (dir) => {
+    const { master, label, identity } = fixture.derived
+    const again = await makeKeypair(dir, 'derived.kxco', [`--master=${master}`, `--label=${label}`, `--algorithm=${kem}`])
+    assert.equal(again.recipient, identity.match(/^public: (kxco1\S+)$/m)[1])
+    assert.equal(again.content.match(/^secret: .*$/m)[0], identity.match(/^secret: .*$/m)[0])
+  }))
+}

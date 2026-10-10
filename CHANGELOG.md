@@ -11,41 +11,16 @@
 **What does not change**
 
 - Every 1.x envelope and identity decrypts.
+- `--algorithm ml-kem-768` still makes an ML-KEM-768 identity.
 
-**New keys are ML-KEM-1024.** `kxco-vault keygen` with no `--algorithm` now
-makes an ML-KEM-1024 identity (FIPS 203, Category 5), and an envelope sealed to
-it carries `algorithm: ml-kem-1024+aes-256-gcm`. Keygen output grows: the public
-key from 1184 to 1568 bytes and the secret key from 2400 to 3168 bytes, and each
-recipient's encapsulated key in an envelope from 1088 to 1568 bytes.
-`--algorithm ml-kem-768` still makes an ML-KEM-768 identity.
+**Detail**
 
-**ML-KEM-768 keys and envelopes keep working.** The key, not the default,
-decides the set, as it has since 1.2.0, so nothing an earlier version wrote
-changes meaning. A test opens an identity and envelope made by the released
-1.3.0 from npm, byte for byte, and an envelope this version seals to that
-identity opens under 1.3.0.
-
-**Deterministic keys: pass `--algorithm ml-kem-768` to derive an old one
-again.** `keygen --master <hex> --label <string>` without `--algorithm` now
-derives the ML-KEM-1024 key for that master and label. A key derived that way
-before 2.0.0 is ML-KEM-768, and the same command with `--algorithm ml-kem-768`
-derives it unchanged; a test checks this against a key 1.3.0 derived. When
-`--master` is given without `--algorithm`, keygen prints one line to stderr
-saying so. Nothing is added to stdout, so a script that reads keygen's output
-gets the same bytes.
-
-**`serializeHeader` takes the set from the encapsulated keys.** With no
-`algorithm`, it writes the line their length gives: 1088 bytes for ML-KEM-768,
-1568 for ML-KEM-1024. A library caller sealing to an ML-KEM-768 key therefore
-never gets an ML-KEM-1024 line from the new default. The header is the AES-GCM
-additional data, so a wrong line could never be corrected afterwards. A passed
-`algorithm` that disagrees with the keys, recipients that mix the two sets, and
-an encapsulated key of any other length now throw `KxcoVaultError`, where 1.3.0
-wrote a header that could not be opened. The CLI already passed the right
-`algorithm`, so CLI users were never exposed to this.
-
-The README and typings lead with ML-KEM-1024, and SECURITY.md and ASSESSMENT.md
-name both sets.
+- An ML-KEM-1024 secret key is 3168 bytes (ML-KEM-768: 2400), and each recipient's encapsulated key in an envelope is 1568 bytes (ML-KEM-768: 1088).
+- The key, not the default, decides the parameter set, as it has since 1.2.0, so nothing a 1.x release wrote changes meaning.
+- `keygen --master` without `--algorithm` prints one line to stderr saying the default changed. Stdout is unchanged, so a script that reads it gets the same bytes.
+- With no `algorithm`, `serializeHeader` takes the set from the encapsulated keys' length, and it also refuses a key of neither length. The header is the AES-GCM additional data, so a wrong algorithm line could never be corrected. The CLI always passed the right `algorithm`, so CLI users were never exposed.
+- The evidence is in `test/fixtures`: an identity, an envelope and a `--master` key made by the latest release of each 1.x line (1.0.8, 1.1.8, 1.2.0 and 1.3.0) with its own CLI, plus 1.2.0's ML-KEM-1024 ones. The tests open every envelope byte for byte and derive every `--master` key again, and 1.3.0 opens an envelope 2.0.0 seals to its key.
+- The README and typings lead with ML-KEM-1024, SECURITY.md and ASSESSMENT.md name both sets, and SECURITY.md lists 2.0.x as the supported line.
 
 ## 1.3.0 (2026-10-09)
 
