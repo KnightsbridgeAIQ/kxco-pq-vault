@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.4.0 (2026-10-10)
+
+**New keys are ML-KEM-1024.** `kxco-vault keygen` with no `--algorithm` now
+makes an ML-KEM-1024 identity (FIPS 203, Category 5), and an envelope sealed to
+it carries `algorithm: ml-kem-1024+aes-256-gcm`. Keygen output grows: the public
+key from 1184 to 1568 bytes and the secret key from 2400 to 3168 bytes, and each
+recipient's encapsulated key in an envelope from 1088 to 1568 bytes.
+`--algorithm ml-kem-768` still makes an ML-KEM-768 identity.
+
+**ML-KEM-768 keys and envelopes keep working.** The key, not the default,
+decides the set, as it has since 1.2.0, so nothing an earlier version wrote
+changes meaning. A test opens an identity and envelope made by the released
+1.3.0 from npm, byte for byte, and an envelope this version seals to that
+identity opens under 1.3.0.
+
+**Deterministic keys: pass `--algorithm ml-kem-768` to derive an old one
+again.** `keygen --master <hex> --label <string>` without `--algorithm` now
+derives the ML-KEM-1024 key for that master and label. A key that 1.3.0 or
+earlier derived that way is ML-KEM-768, and the same command with
+`--algorithm ml-kem-768` derives it unchanged; a test checks this against a key
+1.3.0 derived.
+
+**`serializeHeader` takes the set from the encapsulated keys.** With no
+`algorithm`, it writes the line their length gives: 1088 bytes for ML-KEM-768,
+1568 for ML-KEM-1024. A library caller sealing to an ML-KEM-768 key therefore
+never gets an ML-KEM-1024 line from the new default. The header is the AES-GCM
+additional data, so a wrong line could never be corrected afterwards. A passed
+`algorithm` that disagrees with the keys, recipients that mix the two sets, and
+an encapsulated key of any other length now throw `KxcoVaultError`, where 1.3.0
+wrote a header that could not be opened. The CLI already passed the right
+`algorithm`, so CLI users were never exposed to this.
+
+The README and typings lead with ML-KEM-1024.
+
 ## 1.3.0 (2026-10-09)
 
 Runtime support. No change to the API or its behaviour.

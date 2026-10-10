@@ -42,7 +42,7 @@ function parseFlags(args) {
 export async function keygen(args) {
   if (args.includes('--help') || args.includes('-h')) {
     process.stdout.write(
-      `usage: kxco-vault keygen --out <keypair.kxco> [--master <hex> --label <string>] [--algorithm ml-kem-768|ml-kem-1024]\n`,
+      `usage: kxco-vault keygen --out <keypair.kxco> [--master <hex> --label <string>] [--algorithm ml-kem-1024|ml-kem-768]\n`,
     )
     return 0
   }

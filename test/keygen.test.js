@@ -25,9 +25,9 @@ test('keygen: creates valid identity file', async () => {
     assert.equal(rc, 0)
     const content = readFileSync(out, 'utf-8')
     assert.ok(content.startsWith('KXCO-VAULT-IDENTITY/1.0\n'))
-    assert.ok(content.includes('algorithm: ml-kem-768\n'))
+    assert.ok(content.includes('algorithm: ml-kem-1024\n'))
     assert.match(content, /^public: kxco1/m)
-    assert.match(content, /^secret: [0-9a-f]{4800}\n/m) // 2400 bytes hex
+    assert.match(content, /^secret: [0-9a-f]{6336}\n/m) // 3168 bytes hex
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
