@@ -74,7 +74,7 @@
   },
   "dependencies": {
     "@scure/base": "2.4.0",
-    "kxco-post-quantum": "^1.7.8"
+    "kxco-post-quantum": "^1.10.0"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
