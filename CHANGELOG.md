@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1 (2026-10-29)
+
+Dependencies. No source file changed and the API is the same.
+
+- `kxco-post-quantum` dependency floor moves from `^1.11.1` to `^1.13.0`, the current release.
+
 ## 2.0.0 (2026-10-10)
 
 **Breaking changes**
